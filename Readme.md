@@ -20,7 +20,8 @@ There are 2 types of software developed, one is command line version that runs i
 [Install instructions for Windows and Linux](./Install.en.md)
 
 ## Build
-[Build instructions for Windows and Linux](./Build.en.md)
+[Simplified Build instructions for Windows by hv](./hv/Build_hv.en.md)
+[Build instructions for Windows and Linux by Rigaya](./Build.en.md)
 
 ## System Requirements
 ### Windows
