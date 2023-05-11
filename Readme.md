@@ -21,6 +21,7 @@ There are 2 types of software developed, one is command line version that runs i
 
 ## Build
 [Simplified Build instructions for Windows by hv](./hv/Build_hv.en.md)
+
 [Build instructions for Windows and Linux by Rigaya](./Build.en.md)
 
 ## System Requirements
