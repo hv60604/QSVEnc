@@ -782,6 +782,16 @@ int parse_one_vpp_option(const TCHAR *option_name, const TCHAR *strInput[], int 
                     }
                     continue;
                 }
+                if (ENABLE_VPP_FILTER_DELOGO_MULTIADD && param_arg == _T("multi_add")) {
+                    bool b = false;
+                    if (!cmd_string_to_bool(&b, param_val)) {
+                        vpp->delogo.mode = (b) ? DELOGO_MODE_ADD_MULTI : DELOGO_MODE_REMOVE;
+                    } else {
+                        print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val);
+                        return 1;
+                    }
+                    continue;
+                }
                 if (param_arg == _T("pos")) {
                     int posOffsetX, posOffsetY;
                     if (   2 != _stscanf_s(param_val.c_str(), _T("%dx%d"), &posOffsetX, &posOffsetY)
@@ -875,6 +885,26 @@ int parse_one_vpp_option(const TCHAR *option_name, const TCHAR *strInput[], int 
                         if (!cmd_string_to_bool(&b, param_val)) {
                             vpp->delogo.log = b;
                         } else {
+                            print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val);
+                            return 1;
+                        }
+                        continue;
+                    }
+                }
+                if (ENABLE_VPP_FILTER_DELOGO_MULTIADD) {
+                    if (param_arg == _T("multi_add_depth_min")) {
+                        try {
+                            vpp->delogo.multiaddDepthMin = std::stof(param_val);
+                        } catch (...) {
+                            print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val);
+                            return 1;
+                        }
+                        continue;
+                    }
+                    if (param_arg == _T("multi_add_depth_max")) {
+                        try {
+                            vpp->delogo.multiaddDepthMax = std::stof(param_val);
+                        } catch (...) {
                             print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val);
                             return 1;
                         }
@@ -4870,6 +4900,7 @@ int parse_one_common_option(const TCHAR *option_name, const TCHAR *strInput[], i
         }
         return 0;
     }
+#if !ENCODER_MPP
     if (IS_OPTION("ssim")) {
         common->metric.ssim = true;
         return 0;
@@ -4886,6 +4917,7 @@ int parse_one_common_option(const TCHAR *option_name, const TCHAR *strInput[], i
         common->metric.psnr = false;
         return 0;
     }
+#endif
 #if ENABLE_VMAF
     if (IS_OPTION("no-vmaf")) {
         common->metric.vmaf.enable = false;
@@ -5703,7 +5735,11 @@ tstring gen_cmd(const RGYParamVpp *param, const RGYParamVpp *defaultPrm, bool sa
             ADD_NUM(_T("y"),  delogo.Y);
             ADD_NUM(_T("cb"), delogo.Cb);
             ADD_NUM(_T("cr"), delogo.Cr);
-            ADD_BOOL(_T("add"), delogo.mode);
+            if (param->delogo.mode == DELOGO_MODE_ADD) {
+                ADD_BOOL(_T("add"), delogo.mode);
+            } else if (param->delogo.mode == DELOGO_MODE_ADD_MULTI) {
+                ADD_BOOL(_T("multi_add"), delogo.mode);
+            }
             ADD_BOOL(_T("auto_fade"), delogo.autoFade);
             ADD_BOOL(_T("auto_nr"), delogo.autoNR);
             ADD_NUM(_T("nr_area"), delogo.NRArea);
@@ -6883,10 +6919,12 @@ tstring gen_cmd_help_common() {
         _T("   --allow-other-negative-pts  for debug\n")
         _T("\n");
 #endif
+#if !ENCODER_MPP
     str += _T("\n")
         _T("   --ssim                       calc ssim\n")
         _T("   --psnr                       calc psnr\n")
         _T("\n");
+#endif //#if !ENCODER_MPP
 #if ENABLE_VMAF
     str += strsprintf(_T("")
         _T("   --vmaf [<param1>=<value>][,<param2>=<value>][...]\n")
