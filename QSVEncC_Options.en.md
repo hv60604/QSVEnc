@@ -179,8 +179,6 @@
   - [--chapter \<string\>](#--chapter-string)
   - [--chapter-copy](#--chapter-copy)
   - [--chapter-no-trim](#--chapter-no-trim)
-  - [--key-on-chapter](#--key-on-chapter)
-  - [--keyfile \<string\>](#--keyfile-string)
   - [--sub-source \<string\>\[:{\<int\>?}\[;\<param1\>=\<value1\>...\]/\[\]...\]](#--sub-source-stringintparam1value1)
   - [--sub-copy \[\<int/string\>;\[,\<int/string\>\]...\]](#--sub-copy-intstringintstring)
   - [--sub-disposition \[\<int/string\>?\]\<string\>](#--sub-disposition-intstringstring)
@@ -230,6 +228,7 @@
   - [--vpp-deband \[\<param1\>=\<value1\>\[,\<param2\>=\<value2\>\]...\]](#--vpp-deband-param1value1param2value2)
   - [--vpp-pad \<int\>,\<int\>,\<int\>,\<int\>](#--vpp-pad-intintintint)
   - [--vpp-overlay \[\<param1\>=\<value1\>\]\[,\<param2\>=\<value2\>\],...](#--vpp-overlay-param1value1param2value2)
+  - [--vpp-perc-pre-enc](#--vpp-perc-pre-enc)
   - [--vpp-perf-monitor](#--vpp-perf-monitor)
 - [Other Options](#other-options)
   - [--async-depth \<int\>](#--async-depth-int)
@@ -1398,13 +1397,6 @@ Copy chapters from input file.
 ### --chapter-no-trim
 Do not apply --trim when reading chapters.
 
-### --key-on-chapter
-Set keyframes on chapter position.
-
-### --keyfile &lt;string&gt;
-Set keyframes on frames (starting from 0, 1, 2, ...) specified in the file.
-There should be one frame ID per line.
-
 ### --sub-source &lt;string&gt;[:{&lt;int&gt;?}[;&lt;param1&gt;=&lt;value1&gt;...]/[]...]
 Read subtitle from the specified file and mux into the output file.
 
@@ -1625,6 +1617,7 @@ Vpp filters will be applied in fixed order, regardless of the order in the comma
   - [--vpp-deband](#--vpp-deband-param1value1param2value2)
   - [--vpp-padding](#--vpp-pad-intintintint)
   - [--vpp-overlay](#--vpp-overlay-param1value1param2value2)
+  - [--vpp-perc-pre-enc](#--vpp-perc-pre-enc)
 
 ### --vpp-colorspace [&lt;param1&gt;=&lt;value1&gt;[,&lt;param2&gt;=&lt;value2&gt;]...]  
 Converts colorspace of the video. Available on x64 version.  
@@ -2465,6 +2458,9 @@ Overlay image on top of base video.
   --vpp-overlay file=logo.png,pos=1620x780,size=300x300
   --vpp-overlay file=logo.mp4,pos=0x800,alpha_mode=lumakey,lumakey_threshold=0.0,lumakey_tolerance=0.1
   ```
+
+### --vpp-perc-pre-enc
+Enable perceptual pre encode filter.
 
 ### --vpp-perf-monitor
 Print processing time for each filter enabled. This is meant for profiling purpose only, please note that when this option is enabled,

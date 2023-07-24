@@ -179,8 +179,6 @@
   - [--chapter \<string\>](#--chapter-string)
   - [--chapter-copy](#--chapter-copy)
   - [--chapter-no-trim](#--chapter-no-trim)
-  - [--key-on-chapter](#--key-on-chapter)
-  - [--keyfile \<string\>](#--keyfile-string)
   - [--sub-source \<string\>\[:{\<int\>?}\[;\<param1\>=\<value1\>\]...\]...](#--sub-source-stringintparam1value1)
   - [--sub-copy \[\<int/string\>;\[,\<int/string\>\]...\]](#--sub-copy-intstringintstring)
   - [--sub-disposition \[\<int/string\>?\]\<string\>\[,\<string\>\]\[\]...](#--sub-disposition-intstringstringstring)
@@ -230,6 +228,7 @@
   - [--vpp-deband \[\<param1\>=\<value1\>\[,\<param2\>=\<value2\>\]...\]](#--vpp-deband-param1value1param2value2)
   - [--vpp-pad \<int\>,\<int\>,\<int\>,\<int\>](#--vpp-pad-intintintint)
   - [--vpp-overlay \[\<param1\>=\<value1\>\]\[,\<param2\>=\<value2\>\],...](#--vpp-overlay-param1value1param2value2)
+  - [--vpp-perc-pre-enc](#--vpp-perc-pre-enc)
   - [--vpp-perf-monitor](#--vpp-perf-monitor)
 - [制御系のオプション](#制御系のオプション)
   - [-a, --async-depth \<int\>](#-a---async-depth-int)
@@ -1408,13 +1407,6 @@ nero形式、apple形式、matroska形式に対応する。--chapter-copyとは�
 ### --chapter-no-trim
 チャプター読み込みの際、trimを反映させず、そのまま適用する。
 
-### --key-on-chapter
-キーフレーム位置にチャプターを挿入する。
-
-### --keyfile &lt;string&gt;
-キーフレームしたいフレーム番号を記載したファイルを読み込み、指定のフレームをキーフレームに設定する。
-フレーム番号は、先頭から0, 1, 2, .... として、複数指定する場合は都度改行する。
-
 ### --sub-source &lt;string&gt;[:{&lt;int&gt;?}[;&lt;param1&gt;=&lt;value1&gt;]...]...
 指定のファイルから字幕を読み込みmuxする。
 
@@ -1638,6 +1630,7 @@ vppフィルタの適用順は固定で、コマンドラインの順序によ�
   - [--vpp-deband](#--vpp-deband-param1value1param2value2)
   - [--vpp-padding](#--vpp-pad-intintintint)
   - [--vpp-overlay](#--vpp-overlay-param1value1param2value2)
+  - [--vpp-perc-pre-enc](#--vpp-perc-pre-enc)
 
 ### --vpp-colorspace [&lt;param1&gt;=&lt;value1&gt;[,&lt;param2&gt;=&lt;value2&gt;]...]  
 色空間変換を行う。x64版のみ使用可能。  
@@ -2528,6 +2521,9 @@ GPUによるディテールの強調を行う。0 - 100 の間でディテール
   --vpp-overlay file=logo.png,pos=1620x780,size=300x300
   --vpp-overlay file=logo.mp4,pos=0x800,alpha_mode=lumakey,lumakey_threshold=0.0,lumakey_tolerance=0.1
   ```
+
+### --vpp-perc-pre-enc
+perceptual pre encode filterを有効にする。
 
 ### --vpp-perf-monitor
 有効になったフィルタの平均処理時間を最後に出力する。計測のためフィルタごとに同期をとるため、全体的な速度は低下することに注意(あくまでも個々のフィルタの性能測定用)
