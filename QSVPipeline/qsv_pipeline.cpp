@@ -165,9 +165,9 @@ bool CQSVPipeline::CompareParam(const mfxParamSet& prmIn, const mfxParamSet& prm
     COMPARE_INT(vidprm.mfx.NumThread,          0);
     COMPARE_INT(vidprm.mfx.BRCParamMultiplier, 0);
     COMPARE_INT(vidprm.mfx.LowPower,           0);
-    COMPARE_STR(vidprm.mfx.CodecId,            0, CodecIdToStr);
-    COMPARE_LST(vidprm.mfx.CodecProfile,       0, get_profile_list(prmIn.vidprm.mfx.CodecId));
-    COMPARE_LST(vidprm.mfx.CodecLevel,         0, get_level_list(prmIn.vidprm.mfx.CodecId));
+    COMPARE_LST(vidprm.mfx.CodecId,            0, list_codec_mfx);
+    COMPARE_LST(vidprm.mfx.CodecProfile,       0, get_profile_list(codec_enc_to_rgy(prmIn.vidprm.mfx.CodecId)));
+    COMPARE_LST(vidprm.mfx.CodecLevel,         0, get_level_list(codec_enc_to_rgy(prmIn.vidprm.mfx.CodecId)));
     COMPARE_INT(vidprm.mfx.NumThread,          0);
     COMPARE_INT(vidprm.mfx.TargetUsage,       -1);
     COMPARE_INT(vidprm.mfx.GopPicSize,         0);
@@ -411,11 +411,11 @@ RGY_ERR CQSVPipeline::InitMfxDecParams() {
 }
 
 RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<std::unique_ptr<QSVDevice>>& devList) {
-    if (pInParams->CodecId == MFX_CODEC_RAW) {
+    if (pInParams->codec == RGY_CODEC_RAW) {
         PrintMes(RGY_LOG_DEBUG, _T("Raw codec is selected, disable encode.\n"));
         return RGY_ERR_NONE;
     }
-    const mfxU32 blocksz = (pInParams->CodecId == MFX_CODEC_HEVC) ? 32 : 16;
+    const mfxU32 blocksz = (pInParams->codec == RGY_CODEC_HEVC) ? 32 : 16;
     auto print_feature_warnings = [this](RGYLogLevel log_level, const TCHAR *feature_name) {
         PrintMes(log_level, _T("%s is not supported on current platform, disabled.\n"), feature_name);
     };
@@ -425,32 +425,32 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         PrintMes(RGY_LOG_ERROR, _T("Unknown codec.\n"));
         return RGY_ERR_UNSUPPORTED;
     }
-    const int codecMaxQP = (pInParams->CodecId == MFX_CODEC_AV1) ? 255 : 51 + (encodeBitDepth - 8) * 6;
+    const int codecMaxQP = (pInParams->codec == RGY_CODEC_AV1) ? 255 : 51 + (encodeBitDepth - 8) * 6;
     PrintMes(RGY_LOG_DEBUG, _T("encodeBitDepth: %d, codecMaxQP: %d.\n"), encodeBitDepth, codecMaxQP);
 
     const TCHAR *PG_FF_STR[] = { _T("PG"), _T("FF") };
 
     //エンコードモードのチェック
-    auto availableFeaures = m_device->getEncodeFeature(pInParams->nEncMode, codec_enc_to_rgy(pInParams->CodecId), pInParams->bUseFixedFunc);
-    if (availableFeaures == 0) {
-        availableFeaures = m_device->getEncodeFeature(pInParams->nEncMode, codec_enc_to_rgy(pInParams->CodecId), !pInParams->bUseFixedFunc);
-        if (availableFeaures) {
+    auto availableFeaures = m_device->getEncodeFeature(pInParams->nEncMode, pInParams->codec, pInParams->bUseFixedFunc);
+    if (!availableFeaures) {
+        availableFeaures = m_device->getEncodeFeature(pInParams->nEncMode, pInParams->codec, !pInParams->bUseFixedFunc);
+        if (!!availableFeaures) {
             PrintMes(RGY_LOG_WARN, _T("%s is not supported on this platform, switched to %s mode.\n"), PG_FF_STR[!!pInParams->bUseFixedFunc], PG_FF_STR[!pInParams->bUseFixedFunc]);
             pInParams->bUseFixedFunc = !pInParams->bUseFixedFunc;
         }
     }
     PrintMes(RGY_LOG_DEBUG, _T("Detected avaliable features for hw API v%d.%02d, %s, %s\n%s\n"),
         m_mfxVer.Major, m_mfxVer.Minor,
-        CodecIdToStr(pInParams->CodecId), EncmodeToStr(pInParams->nEncMode), MakeFeatureListStr(availableFeaures).c_str());
+        CodecToStr(pInParams->codec).c_str(), EncmodeToStr(pInParams->nEncMode), MakeFeatureListStr(availableFeaures).c_str());
 
     if (!(availableFeaures & ENC_FEATURE_CURRENT_RC)) {
         //このコーデックがサポートされているかどうか確認する
         if (   pInParams->nEncMode == MFX_RATECONTROL_CQP
             || pInParams->nEncMode == MFX_RATECONTROL_VBR
             || pInParams->nEncMode == MFX_RATECONTROL_CBR
-            || !(m_device->getEncodeFeature(MFX_RATECONTROL_CQP, codec_enc_to_rgy(pInParams->CodecId), pInParams->bUseFixedFunc) & ENC_FEATURE_CURRENT_RC)) {
-            if (!(m_device->getEncodeFeature(MFX_RATECONTROL_CQP, codec_enc_to_rgy(pInParams->CodecId), !pInParams->bUseFixedFunc) & ENC_FEATURE_CURRENT_RC)) {
-                PrintMes(RGY_LOG_ERROR, _T("%s encoding is not supported on current platform.\n"), CodecIdToStr(pInParams->CodecId));
+            || !(m_device->getEncodeFeature(MFX_RATECONTROL_CQP, pInParams->codec, pInParams->bUseFixedFunc) & ENC_FEATURE_CURRENT_RC)) {
+            if (!(m_device->getEncodeFeature(MFX_RATECONTROL_CQP, pInParams->codec, !pInParams->bUseFixedFunc) & ENC_FEATURE_CURRENT_RC)) {
+                PrintMes(RGY_LOG_ERROR, _T("%s encoding is not supported on current platform.\n"), CodecToStr(pInParams->codec).c_str());
                 return RGY_ERR_INVALID_VIDEO_PARAM;
             }
             PrintMes(RGY_LOG_WARN, _T("%s is not supported on this platform, switched to %s mode.\n"), PG_FF_STR[!!pInParams->bUseFixedFunc], PG_FF_STR[!pInParams->bUseFixedFunc]);
@@ -517,7 +517,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         //check_rc_listに設定したfallbackの候補リストをチェックする
         bool bFallbackSuccess = false;
         for (uint32_t i = 0; i < (uint32_t)check_rc_list.size(); i++) {
-            auto availRCFeatures = m_device->getEncodeFeature((uint16_t)check_rc_list[i], codec_enc_to_rgy(pInParams->CodecId), pInParams->bUseFixedFunc);
+            auto availRCFeatures = m_device->getEncodeFeature((uint16_t)check_rc_list[i], pInParams->codec, pInParams->bUseFixedFunc);
             if (availRCFeatures & ENC_FEATURE_CURRENT_RC) {
                 pInParams->nEncMode = (uint16_t)check_rc_list[i];
                 if (pInParams->nEncMode == MFX_RATECONTROL_LA_ICQ) {
@@ -545,7 +545,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     if (pInParams->hyperMode != MFX_HYPERMODE_OFF) {
         if (!(availableFeaures & ENC_FEATURE_HYPER_MODE)) {
             if (ENABLE_HYPER_MODE
-                && pInParams->CodecId == MFX_CODEC_HEVC
+                && pInParams->codec == RGY_CODEC_HEVC
                 && OVERRIDE_HYPER_MODE_HEVC_FROM_H264
                 && check_lib_version(m_mfxVer, MFX_LIB_VERSION_2_5)) {
                 // HEVCのhyper modeのチェックは使用できる場合でもなぜか成功しない
@@ -567,7 +567,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         //HyperModeの対象となるGPUのfeature取得を行い、andをとる
         for (auto& dev2 : devList) {
             if (dev2) { // 自分自身はすでにm_deviceにmoveして、devListにはいなくなっている
-                const auto dev2Feature = dev2->getEncodeFeature(pInParams->nEncMode, codec_enc_to_rgy(pInParams->CodecId), pInParams->bUseFixedFunc);
+                const auto dev2Feature = dev2->getEncodeFeature(pInParams->nEncMode, pInParams->codec, pInParams->bUseFixedFunc);
                 if (dev2Feature & ENC_FEATURE_HYPER_MODE) { // HyperModeに対応するGPUを選択
                     PrintMes(RGY_LOG_DEBUG, _T("Detected avaliable features for hyper mode, dev %d, %s\n%s\n"), (int)dev2->deviceNum(), EncmodeToStr(pInParams->nEncMode), MakeFeatureListStr(dev2Feature).c_str());
                     availableFeaures &= dev2Feature;
@@ -580,27 +580,27 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         }
     }
 
-    const bool gopRefDistAsBframes = gopRefDistAsBframe(pInParams->CodecId);
+    const bool gopRefDistAsBframes = gopRefDistAsBframe(pInParams->codec);
     if (pInParams->GopRefDist != 1 && !(availableFeaures & ENC_FEATURE_GOPREFDIST)) {
         print_feature_warnings(RGY_LOG_WARN, (gopRefDistAsBframes) ? _T("B frame") : _T("GopRefDist"));
         pInParams->GopRefDist = 1; //Bframe = 0
     }
     if (pInParams->GopRefDist == QSV_GOP_REF_DIST_AUTO) {
-        switch (pInParams->CodecId) {
-        case MFX_CODEC_HEVC: pInParams->GopRefDist = QSV_DEFAULT_HEVC_GOP_REF_DIST; break;
-        case MFX_CODEC_AV1:  pInParams->GopRefDist = QSV_DEFAULT_AV1_GOP_REF_DIST; break;
-        case MFX_CODEC_AVC:
+        switch (pInParams->codec) {
+        case RGY_CODEC_HEVC: pInParams->GopRefDist = QSV_DEFAULT_HEVC_GOP_REF_DIST; break;
+        case RGY_CODEC_AV1:  pInParams->GopRefDist = QSV_DEFAULT_AV1_GOP_REF_DIST; break;
+        case RGY_CODEC_H264:
         default:             pInParams->GopRefDist = QSV_DEFAULT_H264_GOP_REF_DIST; break;
         }
     }
     //その他機能のチェック
     if (pInParams->bAdaptiveI && !(availableFeaures & ENC_FEATURE_ADAPTIVE_I)) {
         PrintMes(RGY_LOG_WARN, _T("Adaptve I-frame insert is not supported on current platform, disabled.\n"));
-        pInParams->bAdaptiveI = false;
+        pInParams->bAdaptiveI.reset();
     }
     if (pInParams->bAdaptiveB && !(availableFeaures & ENC_FEATURE_ADAPTIVE_B)) {
         PrintMes(RGY_LOG_WARN, _T("Adaptve B-frame insert is not supported on current platform, disabled.\n"));
-        pInParams->bAdaptiveB = false;
+        pInParams->bAdaptiveB.reset();
     }
     if (pInParams->bBPyramid && !(availableFeaures & ENC_FEATURE_B_PYRAMID)) {
         print_feature_warnings(RGY_LOG_WARN, _T("B pyramid"));
@@ -612,7 +612,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     }
     if (pInParams->extBRC && !(availableFeaures & ENC_FEATURE_EXT_BRC)) {
         print_feature_warnings(RGY_LOG_WARN, _T("ExtBRC"));
-        pInParams->extBRC = false;
+        pInParams->extBRC.reset();
     }
     if (pInParams->tuneQuality != MFX_ENCODE_TUNE_DEFAULT && !(availableFeaures & ENC_FEATURE_TUNE_ENCODE_QUALITY)) {
         print_feature_warnings(RGY_LOG_WARN, _T("Tune Quality"));
@@ -624,19 +624,19 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     }
     if (pInParams->adaptiveRef && !(availableFeaures & ENC_FEATURE_ADAPTIVE_REF)) {
         print_feature_warnings(RGY_LOG_WARN, _T("adaptiveRef"));
-        pInParams->adaptiveRef = false;
+        pInParams->adaptiveRef.reset();
     }
     if (pInParams->adaptiveLTR && !(availableFeaures & ENC_FEATURE_ADAPTIVE_LTR)) {
         print_feature_warnings(RGY_LOG_WARN, _T("AdaptiveLTR"));
-        pInParams->adaptiveLTR = false;
+        pInParams->adaptiveLTR.reset();
     }
     if (pInParams->adaptiveCQM && !(availableFeaures & ENC_FEATURE_ADAPTIVE_CQM)) {
         print_feature_warnings(RGY_LOG_WARN, _T("AdaptiveCQM"));
-        pInParams->adaptiveCQM = false;
+        pInParams->adaptiveCQM.reset();
     }
     if (pInParams->bMBBRC && !(availableFeaures & ENC_FEATURE_MBBRC)) {
         print_feature_warnings(RGY_LOG_WARN, _T("MBBRC"));
-        pInParams->bMBBRC = false;
+        pInParams->bMBBRC.reset();
     }
     if (   (MFX_RATECONTROL_LA     == pInParams->nEncMode
          || MFX_RATECONTROL_LA_ICQ == pInParams->nEncMode)
@@ -658,7 +658,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         PrintMes(RGY_LOG_ERROR, _T("Interlaced encoding is not supported on current rate control mode.\n"));
         return RGY_ERR_INVALID_VIDEO_PARAM;
     }
-    if (pInParams->CodecId == MFX_CODEC_AVC
+    if (pInParams->codec == RGY_CODEC_H264
         && ((m_encPicstruct & RGY_PICSTRUCT_INTERLACED) != 0)
         && pInParams->GopRefDist > 1 //Bframes > 0
         && m_device->CPUGen() == CPU_GEN_HASWELL
@@ -671,12 +671,16 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     //if (pInParams->nBframes > 2 && pInParams->CodecId == MFX_CODEC_HEVC) {
     //    PrintMes(RGY_LOG_WARN, _T("HEVC encoding + B-frames > 2 might cause artifacts, please check the output.\n"));
     //}
-    if (pInParams->bBPyramid && pInParams->GopRefDist-1 >= 10 && !(availableFeaures & ENC_FEATURE_B_PYRAMID_MANY_BFRAMES)) {
-        PrintMes(RGY_LOG_WARN, _T("B pyramid with too many bframes is not supported on current platform, B pyramid disabled.\n"));
+    if (!pInParams->bBPyramid.value_or(true) && pInParams->GopRefDist-1 >= 10 && !(availableFeaures & ENC_FEATURE_B_PYRAMID_MANY_BFRAMES)) {
+        if (pInParams->bBPyramid.value_or(false)) {
+            PrintMes(RGY_LOG_WARN, _T("B pyramid with too many bframes is not supported on current platform, B pyramid disabled.\n"));
+        }
         pInParams->bBPyramid = false;
     }
-    if (pInParams->bBPyramid && m_device->CPUGen() < CPU_GEN_HASWELL) {
-        PrintMes(RGY_LOG_WARN, _T("B pyramid on IvyBridge generation might cause artifacts, please check your encoded video.\n"));
+    if (!pInParams->bBPyramid.value_or(true) && m_device->CPUGen() < CPU_GEN_HASWELL) {
+        if (pInParams->bBPyramid.value_or(false)) {
+            PrintMes(RGY_LOG_WARN, _T("B pyramid on IvyBridge generation might cause artifacts, please check your encoded video.\n"));
+        }
     }
     if (pInParams->bNoDeblock && !(availableFeaures & ENC_FEATURE_NO_DEBLOCK)) {
         print_feature_warnings(RGY_LOG_WARN, _T("No deblock"));
@@ -704,7 +708,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     }
     if (pInParams->bDirectBiasAdjust && !(availableFeaures & ENC_FEATURE_DIRECT_BIAS_ADJUST)) {
         print_feature_warnings(RGY_LOG_WARN, _T("Direct Bias Adjust"));
-        pInParams->bDirectBiasAdjust = 0;
+        pInParams->bDirectBiasAdjust.reset();
     }
     if (pInParams->bGlobalMotionAdjust && !(availableFeaures & ENC_FEATURE_GLOBAL_MOTION_ADJUST)) {
         print_feature_warnings(RGY_LOG_WARN, _T("MV Cost Scaling"));
@@ -724,18 +728,18 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         pInParams->nWeightB = 0;
     }
 #if !ENABLE_FADE_DETECT
-    if (pInParams->nFadeDetect == MFX_CODINGOPTION_ON) {
+    if (pInParams->nFadeDetect.value_or(false)) {
         PrintMes(RGY_LOG_WARN, _T("fade-detect will be disabled due to instability.\n"));
-        pInParams->nFadeDetect = MFX_CODINGOPTION_UNKNOWN;
+        pInParams->nFadeDetect = MFX_CODINGOPTION_OFF;
     }
 #endif
-    if (pInParams->nFadeDetect != MFX_CODINGOPTION_UNKNOWN && !(availableFeaures & ENC_FEATURE_FADE_DETECT)) {
-        if (pInParams->nFadeDetect == MFX_CODINGOPTION_ON) {
+    if (pInParams->nFadeDetect.has_value() && !(availableFeaures & ENC_FEATURE_FADE_DETECT)) {
+        if (pInParams->nFadeDetect.value_or(false)) {
             print_feature_warnings(RGY_LOG_WARN, _T("FadeDetect"));
         }
-        pInParams->nFadeDetect = MFX_CODINGOPTION_UNKNOWN;
+        pInParams->nFadeDetect.reset();
     }
-    if (pInParams->CodecId == MFX_CODEC_HEVC) {
+    if (pInParams->codec == RGY_CODEC_HEVC) {
         if (pInParams->hevc_ctu > 0 && !(availableFeaures & ENC_FEATURE_HEVC_CTU)) {
             print_feature_warnings(RGY_LOG_WARN, _T("HEVC CTU"));
             pInParams->hevc_ctu = 0;
@@ -750,10 +754,10 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         }
         if (pInParams->hevc_gpb.has_value() && !(availableFeaures & ENC_FEATURE_DISABLE_GPB)) {
             print_feature_warnings(RGY_LOG_WARN, _T("HEVC GPB"));
-            pInParams->hevc_gpb = false;
+            pInParams->hevc_gpb.reset();
         }
     }
-    if (pInParams->CodecId == MFX_CODEC_VP9) {
+    if (pInParams->codec == RGY_CODEC_VP9) {
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_15)) {
             if (!pInParams->bUseFixedFunc) {
                 PrintMes(RGY_LOG_WARN, _T("Switched to fixed function (FF) mode, as VP9 encoding requires FF mode.\n"));
@@ -806,7 +810,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     }
 
     //profileを守るための調整
-    if (pInParams->CodecId == MFX_CODEC_AVC) {
+    if (pInParams->codec == RGY_CODEC_H264) {
         if (pInParams->CodecProfile == MFX_PROFILE_AVC_BASELINE) {
             pInParams->GopRefDist = 1; //Bframe=0
             pInParams->bCAVLC = true;
@@ -816,13 +820,13 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         }
     }
 
-    CHECK_RANGE_LIST(pInParams->CodecId,      list_codec,   "codec");
-    CHECK_RANGE_LIST(pInParams->CodecLevel,   get_level_list(pInParams->CodecId),   "level");
-    CHECK_RANGE_LIST(pInParams->CodecProfile, get_profile_list(pInParams->CodecId), "profile");
+    CHECK_RANGE_LIST(pInParams->codec,        list_codec_rgy,   "codec");
+    CHECK_RANGE_LIST(pInParams->CodecLevel,   get_level_list(pInParams->codec),   "level");
+    CHECK_RANGE_LIST(pInParams->CodecProfile, get_profile_list(pInParams->codec), "profile");
     CHECK_RANGE_LIST(pInParams->nEncMode,     list_rc_mode, "rc mode");
 
     //設定開始
-    m_mfxEncParams.mfx.CodecId                 = pInParams->CodecId;
+    m_mfxEncParams.mfx.CodecId                 = codec_rgy_to_enc(pInParams->codec);
     m_mfxEncParams.mfx.RateControlMethod       = (mfxU16)pInParams->nEncMode;
     if (MFX_RATECONTROL_CQP == m_mfxEncParams.mfx.RateControlMethod) {
         //CQP
@@ -880,9 +884,9 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
      * For HEVC, if IdrInterval = 0, then only first I-frame is an IDR-frame. If IdrInterval = 1, then every I-frame is an IDR-frame. If IdrInterval = 2, then every other I-frame is an IDR-frame, etc.
      * For MPEG2, IdrInterval defines sequence header interval in terms of I-frames. If IdrInterval = N, SDK inserts the sequence header before every Nth I-frame. If IdrInterval = 0 (default), SDK inserts the sequence header once at the beginning of the stream.
      * If GopPicSize or GopRefDist is zero, IdrInterval is undefined. */
-    if (pInParams->CodecId == MFX_CODEC_HEVC) {
+    if (pInParams->codec == RGY_CODEC_HEVC) {
         m_mfxEncParams.mfx.IdrInterval = (mfxU16)((!pInParams->bopenGOP) ? 1 : 1 + ((m_encFps.n() + m_encFps.d() - 1) / m_encFps.d()) * 600 / pInParams->nGOPLength);
-    } else if (pInParams->CodecId == MFX_CODEC_AVC) {
+    } else if (pInParams->codec == RGY_CODEC_H264) {
         m_mfxEncParams.mfx.IdrInterval = (mfxU16)((!pInParams->bopenGOP) ? 0 : ((m_encFps.n() + m_encFps.d() - 1) / m_encFps.d()) * 600 / pInParams->nGOPLength);
     } else {
         m_mfxEncParams.mfx.IdrInterval = 0;
@@ -960,12 +964,13 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
 
 
     //API v1.6の機能
-    if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_6)) {
+    if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_6)
+        && (availableFeaures & ENC_FEATURE_EXT_COP2)) {
         INIT_MFX_EXT_BUFFER(m_CodingOption2, MFX_EXTBUFF_CODING_OPTION2);
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_8)) {
-            m_CodingOption2.AdaptiveI   = (mfxU16)((pInParams->bAdaptiveI) ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_UNKNOWN);
-            m_CodingOption2.AdaptiveB   = (mfxU16)((pInParams->bAdaptiveB) ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_UNKNOWN);
-            m_CodingOption2.BRefType    = (mfxU16)((pInParams->bBPyramid)  ? MFX_B_REF_PYRAMID   : MFX_B_REF_OFF);
+            m_CodingOption2.AdaptiveI   = get_codingopt(pInParams->bAdaptiveI);
+            m_CodingOption2.AdaptiveB   = get_codingopt(pInParams->bAdaptiveB);
+            m_CodingOption2.BRefType    = (decltype(m_CodingOption2.BRefType))get3state(pInParams->bBPyramid, MFX_B_REF_UNKNOWN, MFX_B_REF_PYRAMID, MFX_B_REF_OFF);
 
             CHECK_RANGE_LIST(pInParams->nLookaheadDS, list_lookahead_ds, "la-quality");
             m_CodingOption2.LookAheadDS = (mfxU16)pInParams->nLookaheadDS;
@@ -976,13 +981,8 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
             CHECK_RANGE_LIST(pInParams->nTrellis, list_avc_trellis_for_options, "trellis");
             m_CodingOption2.Trellis = (mfxU16)pInParams->nTrellis;
         }
-        if (pInParams->bMBBRC) {
-            m_CodingOption2.MBBRC = MFX_CODINGOPTION_ON;
-        }
-
-        if (pInParams->extBRC) {
-            m_CodingOption2.ExtBRC = MFX_CODINGOPTION_ON;
-        }
+        m_CodingOption2.MBBRC = get_codingopt(pInParams->bMBBRC);
+        m_CodingOption2.ExtBRC = get_codingopt(pInParams->extBRC);
         if (pInParams->intraRefreshCycle > 0) {
             m_CodingOption2.IntRefType = MFX_REFRESH_VERTICAL;
             if (pInParams->intraRefreshCycle == 1) {
@@ -1035,7 +1035,8 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     }
 
     //API v1.11の機能
-    if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_11)) {
+    if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_11)
+        && (availableFeaures & ENC_FEATURE_EXT_COP3)) {
         INIT_MFX_EXT_BUFFER(m_CodingOption3, MFX_EXTBUFF_CODING_OPTION3);
         if (MFX_RATECONTROL_QVBR == m_mfxEncParams.mfx.RateControlMethod) {
             m_CodingOption3.QVBRQuality = (mfxU16)clamp_param_int(pInParams->nQVBRQuality, 1, codecMaxQP, _T("qvbr-q"));
@@ -1055,9 +1056,9 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
 
         //API v1.13の機能
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_13)) {
-            m_CodingOption3.DirectBiasAdjustment       = (mfxU16)((pInParams->bDirectBiasAdjust)   ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF);
-            m_CodingOption3.GlobalMotionBiasAdjustment = (mfxU16)((pInParams->bGlobalMotionAdjust) ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF);
+            m_CodingOption3.DirectBiasAdjustment = get_codingopt(pInParams->bDirectBiasAdjust);
             if (pInParams->bGlobalMotionAdjust) {
+                m_CodingOption3.GlobalMotionBiasAdjustment = MFX_CODINGOPTION_ON;
                 CHECK_RANGE_LIST(pInParams->nMVCostScaling, list_mv_cost_scaling, "mv-scaling");
                 m_CodingOption3.MVCostScalingFactor    = (mfxU16)pInParams->nMVCostScaling;
             }
@@ -1068,15 +1069,11 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
             m_CodingOption3.ScenarioInfo   = (mfxU16)(pInParams->scenarioInfo);
         }
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_17)) {
-            m_CodingOption3.FadeDetection = check_coding_option((mfxU16)pInParams->nFadeDetect);
+            m_CodingOption3.FadeDetection = get_codingopt(pInParams->nFadeDetect);
         }
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_18)) {
             if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_HEVC) {
-                if (pInParams->hevc_gpb.has_value()) {
-                    m_CodingOption3.GPB = (mfxU16)(pInParams->hevc_gpb.value() ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF);
-                } else {
-                    m_CodingOption3.GPB = MFX_CODINGOPTION_UNKNOWN;
-                }
+                m_CodingOption3.GPB = get_codingopt(pInParams->hevc_gpb);
             }
         }
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_19)) {
@@ -1092,23 +1089,27 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
             }
         }
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_23)) {
-            m_CodingOption3.RepartitionCheckEnable = (mfxU16)pInParams->nRepartitionCheck;
+            m_CodingOption3.RepartitionCheckEnable = get_codingopt(pInParams->nRepartitionCheck);
         }
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_26)) {
             if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_HEVC) {
                 m_CodingOption3.TransformSkip = (mfxU16)pInParams->hevc_tskip;
             }
         }
+        if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_2_2)) {
+            m_CodingOption3.AdaptiveCQM = get_codingopt(pInParams->adaptiveCQM);
+        }
         if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_2_4)) {
-            m_CodingOption3.AdaptiveRef = (mfxU16)(pInParams->adaptiveRef ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_UNKNOWN);
-            m_CodingOption3.AdaptiveLTR = (mfxU16)(pInParams->adaptiveLTR ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_UNKNOWN);
+            m_CodingOption3.AdaptiveRef = get_codingopt(pInParams->adaptiveRef);
+            m_CodingOption3.AdaptiveLTR = get_codingopt(pInParams->adaptiveLTR);
         }
         m_EncExtParams.push_back((mfxExtBuffer *)&m_CodingOption3);
     }
 
 
     if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_2_9)
-        && pInParams->tuneQuality != MFX_ENCODE_TUNE_DEFAULT) {
+        && pInParams->tuneQuality != MFX_ENCODE_TUNE_DEFAULT
+        && (availableFeaures & ENC_FEATURE_EXT_TUNE_ENC_QUALITY)) {
         INIT_MFX_EXT_BUFFER(m_tuneEncQualityPrm, MFX_EXTBUFF_TUNE_ENCODE_QUALITY);
         m_tuneEncQualityPrm.TuneQuality = (decltype(m_tuneEncQualityPrm.TuneQuality))(pInParams->tuneQuality);
         m_EncExtParams.push_back((mfxExtBuffer *)&m_tuneEncQualityPrm);
@@ -1166,7 +1167,7 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         //m_CodingOption.EndOfStream   = MFX_CODINGOPTION_ON; //hwモードでは効果なし 0x00, 0x00, 0x01, 0x0b
         PrintMes(RGY_LOG_DEBUG, _T("InitMfxEncParams: Adjusted param for Bluray encoding.\n"));
     }
-    if (add_cop(m_mfxEncParams.mfx.CodecId)) { // VP9ではmfxExtCodingOptionはチェックしないようにしないと正常に動作しない
+    if (availableFeaures & ENC_FEATURE_EXT_COP) { // VP9ではmfxExtCodingOptionはチェックしないようにしないと正常に動作しない
         m_EncExtParams.push_back((mfxExtBuffer *)&m_CodingOption);
     }
 
@@ -1174,7 +1175,8 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     //m_mfxEncParams.mfx.TimeStampCalc = (mfxU16)((pInParams->vpp.nDeinterlace == MFX_DEINTERLACE_IT) ? MFX_TIMESTAMPCALC_TELECINE : MFX_TIMESTAMPCALC_UNKNOWN);
     //m_mfxEncParams.mfx.ExtendedPicStruct = pInParams->nPicStruct;
 
-    if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_3) &&
+    if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_3)
+        && (availableFeaures & ENC_FEATURE_EXT_VIDEO_SIGNAL_INFO) &&
         (m_encVUI.format    != get_cx_value(list_videoformat, _T("undef")) ||
          m_encVUI.colorprim != get_cx_value(list_colorprim, _T("undef")) ||
          m_encVUI.transfer  != get_cx_value(list_transfer, _T("undef")) ||
@@ -1199,7 +1201,8 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
             m_EncExtParams.push_back((mfxExtBuffer *)&m_VideoSignalInfo);
     }
     if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_13)
-        && m_encVUI.chromaloc != RGY_CHROMALOC_UNSPECIFIED) {
+        && m_encVUI.chromaloc != RGY_CHROMALOC_UNSPECIFIED
+        && (availableFeaures & ENC_FEATURE_EXT_CHROMALOC)) {
         INIT_MFX_EXT_BUFFER(m_chromalocInfo, MFX_EXTBUFF_CHROMA_LOC_INFO);
         m_chromalocInfo.ChromaLocInfoPresentFlag = 1;
         m_chromalocInfo.ChromaSampleLocTypeTopField = (mfxU16)(m_encVUI.chromaloc-1);
@@ -1237,7 +1240,8 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
 
     // In case of HEVC when height and/or width divided with 8 but not divided with 16
     // add extended parameter to increase performance
-    if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_HEVC) {
+    if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_HEVC
+        && (availableFeaures & ENC_FEATURE_EXT_HEVC_PRM)) {
         INIT_MFX_EXT_BUFFER(m_ExtHEVCParam, MFX_EXTBUFF_HEVC_PARAM);
         m_ExtHEVCParam.PicWidthInLumaSamples = m_mfxEncParams.mfx.FrameInfo.CropW;
         m_ExtHEVCParam.PicHeightInLumaSamples = m_mfxEncParams.mfx.FrameInfo.CropH;
@@ -1248,14 +1252,16 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
         m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtHEVCParam);
     }
 
-    if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_VP8) {
+    if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_VP8
+        && (availableFeaures & ENC_FEATURE_EXT_COP_VP8)) {
         INIT_MFX_EXT_BUFFER(m_ExtVP8CodingOption, MFX_EXTBUFF_VP8_CODING_OPTION);
         m_ExtVP8CodingOption.SharpnessLevel = (mfxU16)clamp_param_int(pInParams->nVP8Sharpness, 0, 8, _T("sharpness"));
         m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtVP8CodingOption);
     }
 
     if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_VP9
-        && check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_26)) {
+        && check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_26)
+        && (availableFeaures & ENC_FEATURE_EXT_VP9_PRM)) {
         INIT_MFX_EXT_BUFFER(m_ExtVP9Param, MFX_EXTBUFF_VP9_PARAM);
         //m_ExtVP9Param.FrameWidth = m_mfxEncParams.mfx.FrameInfo.Width;
         //m_ExtVP9Param.FrameHeight = m_mfxEncParams.mfx.FrameInfo.Height;
@@ -1267,26 +1273,33 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
 
     if (m_mfxEncParams.mfx.CodecId == MFX_CODEC_AV1
         && check_lib_version(m_mfxVer, MFX_LIB_VERSION_2_5)) {
-        INIT_MFX_EXT_BUFFER(m_ExtAV1BitstreamParam, MFX_EXTBUFF_AV1_BITSTREAM_PARAM);
-        //m_ExtVP9Param.FrameWidth = m_mfxEncParams.mfx.FrameInfo.Width;
-        //m_ExtVP9Param.FrameHeight = m_mfxEncParams.mfx.FrameInfo.Height;
-        m_ExtAV1BitstreamParam.WriteIVFHeaders = MFX_CODINGOPTION_OFF;
-        //m_ExtVP9Param.NumTileColumns = 2;
-        //m_ExtVP9Param.NumTileRows = 2;
-        m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtAV1BitstreamParam);
+        if (availableFeaures & ENC_FEATURE_EXT_AV1_BITSTREAM_PRM) {
+            INIT_MFX_EXT_BUFFER(m_ExtAV1BitstreamParam, MFX_EXTBUFF_AV1_BITSTREAM_PARAM);
+            //m_ExtVP9Param.FrameWidth = m_mfxEncParams.mfx.FrameInfo.Width;
+            //m_ExtVP9Param.FrameHeight = m_mfxEncParams.mfx.FrameInfo.Height;
+            m_ExtAV1BitstreamParam.WriteIVFHeaders = MFX_CODINGOPTION_OFF;
+            //m_ExtVP9Param.NumTileColumns = 2;
+            //m_ExtVP9Param.NumTileRows = 2;
+            m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtAV1BitstreamParam);
+        }
 
-        INIT_MFX_EXT_BUFFER(m_ExtAV1ResolutionParam, MFX_EXTBUFF_AV1_RESOLUTION_PARAM);
-        INIT_MFX_EXT_BUFFER(m_ExtAV1TileParam, MFX_EXTBUFF_AV1_TILE_PARAM);
-        //m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtAV1ResolutionParam);
+        if (availableFeaures & ENC_FEATURE_EXT_AV1_RESOLUTION_PRM) {
+            INIT_MFX_EXT_BUFFER(m_ExtAV1ResolutionParam, MFX_EXTBUFF_AV1_RESOLUTION_PARAM);
+            INIT_MFX_EXT_BUFFER(m_ExtAV1TileParam, MFX_EXTBUFF_AV1_TILE_PARAM);
+            //m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtAV1ResolutionParam);
+        }
 
-        if (pInParams->av1.tile_row != 0 || pInParams->av1.tile_col != 0) {
-            m_ExtAV1TileParam.NumTileRows    = (mfxU16)std::max(pInParams->av1.tile_row, 1);
-            m_ExtAV1TileParam.NumTileColumns = (mfxU16)std::max(pInParams->av1.tile_col, 1);
+        if (availableFeaures & ENC_FEATURE_EXT_AV1_TILE_PRM) {
+            if (pInParams->av1.tile_row != 0 || pInParams->av1.tile_col != 0) {
+                m_ExtAV1TileParam.NumTileRows = (mfxU16)std::max(pInParams->av1.tile_row, 1);
+                m_ExtAV1TileParam.NumTileColumns = (mfxU16)std::max(pInParams->av1.tile_col, 1);
 
-            m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtAV1TileParam);
+                m_EncExtParams.push_back((mfxExtBuffer*)&m_ExtAV1TileParam);
+            }
         }
     }
-    if (pInParams->hyperMode != MFX_HYPERMODE_OFF) {
+    if (pInParams->hyperMode != MFX_HYPERMODE_OFF
+        && (availableFeaures & ENC_FEATURE_EXT_HYPER_MODE)) {
         INIT_MFX_EXT_BUFFER(m_hyperModeParam, MFX_EXTBUFF_HYPER_MODE_PARAM);
         m_hyperModeParam.Mode = pInParams->hyperMode;
         m_EncExtParams.push_back((mfxExtBuffer*)&m_hyperModeParam);
@@ -1312,6 +1325,8 @@ RGY_ERR CQSVPipeline::InitMfxEncodeParams(sInputParams *pInParams, std::vector<s
     if (!m_pmfxENC) {
         return RGY_ERR_MEMORY_ALLOC;
     }
+    //のちの使用のために保存
+    m_encFeatures = availableFeaures;
     return RGY_ERR_NONE;
 }
 
@@ -1565,6 +1580,7 @@ CQSVPipeline::CQSVPipeline() :
     m_mfxDEC(),
     m_pmfxENC(),
     m_mfxVPP(),
+    m_encFeatures(),
     m_trimParam(),
     m_mfxEncParams(),
     m_prmSetIn(),
@@ -1710,7 +1726,7 @@ RGY_ERR CQSVPipeline::InitOutput(sInputParams *inputParams) {
         outFrameInfo->videoPrm.mfx.CodecId = 0; //エンコードしない場合は出力コーデックはraw(=0)
     }
     const auto outputVideoInfo = (outFrameInfo->isVppParam) ? videooutputinfo(outFrameInfo->videoPrmVpp.vpp.Out) : videooutputinfo(outFrameInfo->videoPrm.mfx, m_VideoSignalInfo, m_chromalocInfo);
-    if (outputVideoInfo.codec == RGY_CODEC_UNKNOWN) {
+    if (outputVideoInfo.codec == RGY_CODEC_RAW) {
         inputParams->common.AVMuxTarget &= ~RGY_MUX_VIDEO;
     }
     m_hdrsei = createHEVCHDRSei(inputParams->common.maxCll, inputParams->common.masterDisplay, inputParams->common.atcSei, m_pFileReader.get());
@@ -1911,7 +1927,7 @@ RGY_ERR CQSVPipeline::CheckParam(sInputParams *inputParam) {
             inputParam->memType = D3D11_MEMORY;
             PrintMes(RGY_LOG_DEBUG, _T("d3d11 mode prefered, switched to d3d11 mode.\n"));
         //出力コーデックがrawなら、systemメモリを自動的に使用する
-        } else if (inputParam->CodecId == MFX_CODEC_RAW) {
+        } else if (inputParam->codec == RGY_CODEC_RAW) {
             inputParam->memType = SYSTEM_MEMORY;
             PrintMes(RGY_LOG_DEBUG, _T("Automatically selecting system memory for output raw frames.\n"));
         }
@@ -2664,6 +2680,7 @@ RGY_ERR CQSVPipeline::AddFilterOpenCL(std::vector<std::unique_ptr<RGYFilter>>& c
         param->frameOut = inputFrame;
         param->frameOut.width += params->vpp.pad.left + params->vpp.pad.right;
         param->frameOut.height += params->vpp.pad.top + params->vpp.pad.bottom;
+        param->encoderCsp = getEncoderCsp(params);
         param->baseFps = m_encFps;
         param->bOutOverwrite = false;
         auto sts = filter->init(param, m_pQSVLog);
@@ -2848,7 +2865,7 @@ RGY_ERR CQSVPipeline::InitFilters(sInputParams *inputParam) {
         return RGY_ERR_UNSUPPORTED;
     }
     // blocksize
-    const int blocksize = inputParam->CodecId == MFX_CODEC_HEVC ? 32 : 16;
+    const int blocksize = inputParam->codec == RGY_CODEC_HEVC ? 32 : 16;
     //読み込み時のcrop
     sInputCrop *inputCrop = (cropRequired) ? &inputParam->input.crop : nullptr;
     const auto resize = std::make_pair(resizeWidth, resizeHeight);
@@ -2991,30 +3008,32 @@ bool CQSVPipeline::preferD3D11Mode(const sInputParams *inputParam) {
 
 RGY_ERR CQSVPipeline::checkGPUListByEncoder(const sInputParams *prm, std::vector<std::unique_ptr<QSVDevice>>& gpuList) {
     PrintMes(RGY_LOG_DEBUG, _T("Check GPU List by Encoder from %d devices.\n"), (int)gpuList.size());
+    if (prm->codec == RGY_CODEC_RAW) {
+        return RGY_ERR_NONE;
+    }
 
-    const auto enc_codec = codec_enc_to_rgy(prm->CodecId);
-    const auto enc_csp = getEncoderCsp(prm);
+    //const auto enc_csp = getEncoderCsp(prm);
     const auto enc_bitdepth = getEncoderBitdepth(prm);
     const auto rate_control = prm->nEncMode;
     tstring message;
     for (auto gpu = gpuList.begin(); gpu != gpuList.end(); ) {
         PrintMes(RGY_LOG_DEBUG, _T("Checking GPU #%d (%s) for codec %s.\n"),
-            (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(enc_codec).c_str());
-        uint64_t deviceFeature = 0;
+            (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(prm->codec).c_str());
+        QSVEncFeatures deviceFeature;
         //コーデックのチェック
-        if (   (deviceFeature = (*gpu)->getEncodeFeature(rate_control, enc_codec, prm->bUseFixedFunc)) == 0
-            && (deviceFeature = (*gpu)->getEncodeFeature(rate_control, enc_codec, !prm->bUseFixedFunc)) == 0
-            && (deviceFeature = (*gpu)->getEncodeFeature(MFX_RATECONTROL_CQP, enc_codec, prm->bUseFixedFunc)) == 0
-            && (deviceFeature = (*gpu)->getEncodeFeature(MFX_RATECONTROL_CQP, enc_codec, !prm->bUseFixedFunc)) == 0) {
+        if (   !(deviceFeature = (*gpu)->getEncodeFeature(rate_control, prm->codec, prm->bUseFixedFunc))
+            && !(deviceFeature = (*gpu)->getEncodeFeature(rate_control, prm->codec, !prm->bUseFixedFunc))
+            && !(deviceFeature = (*gpu)->getEncodeFeature(MFX_RATECONTROL_CQP, prm->codec, prm->bUseFixedFunc))
+            && !(deviceFeature = (*gpu)->getEncodeFeature(MFX_RATECONTROL_CQP, prm->codec, !prm->bUseFixedFunc))) {
             message += strsprintf(_T("GPU #%d (%s) does not support %s encoding.\n"),
-                (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(enc_codec).c_str());
+                (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(prm->codec).c_str());
             gpu = gpuList.erase(gpu);
             continue;
         }
         //10bit深度のチェック
         if (enc_bitdepth > 8 && (deviceFeature & ENC_FEATURE_10BIT_DEPTH) != ENC_FEATURE_10BIT_DEPTH) {
             message += strsprintf(_T("GPU #%d (%s) does not support %s %d bit encoding.\n"),
-                (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(enc_codec).c_str(), enc_bitdepth);
+                (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(prm->codec).c_str(), enc_bitdepth);
             gpu = gpuList.erase(gpu);
             continue;
         }
@@ -3027,11 +3046,11 @@ RGY_ERR CQSVPipeline::checkGPUListByEncoder(const sInputParams *prm, std::vector
             && !prm->vpp.yadif.enable;
         if (interlacedEncoding && (deviceFeature & ENC_FEATURE_INTERLACE) != ENC_FEATURE_INTERLACE) {
             message += strsprintf(_T("GPU #%d (%s) does not support %s interlaced encoding.\n"),
-                (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(enc_codec).c_str());
+                (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(prm->codec).c_str());
             gpu = gpuList.erase(gpu);
             continue;
         }
-        PrintMes(RGY_LOG_DEBUG, _T("GPU #%d (%s) available for %s encode.\n"), (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(enc_codec).c_str());
+        PrintMes(RGY_LOG_DEBUG, _T("GPU #%d (%s) available for %s encode.\n"), (*gpu)->deviceNum(), (*gpu)->name().c_str(), CodecToStr(prm->codec).c_str());
         gpu++;
     }
     PrintMes((gpuList.size() == 0) ? RGY_LOG_ERROR : RGY_LOG_DEBUG, _T("%s\n"), message.c_str());
@@ -3186,12 +3205,12 @@ RGY_ERR CQSVPipeline::InitPowerThrottoling(sInputParams *pParams) {
     int score_tu = 0;
     if (m_pmfxENC) {
         //MPEG2/H.264エンコードは高速
-        switch (pParams->CodecId) {
-        case MFX_CODEC_MPEG2:
-        case MFX_CODEC_AVC:
+        switch (pParams->codec) {
+        case RGY_CODEC_MPEG2:
+        case RGY_CODEC_H264:
             score_codec += 2;
             break;
-        case MFX_CODEC_HEVC:
+        case RGY_CODEC_HEVC:
         default:
             score_codec += 0;
             break;
@@ -4078,8 +4097,9 @@ const TCHAR *CQSVPipeline::GetInputMessage() {
 }
 
 std::pair<RGY_ERR, std::unique_ptr<QSVVideoParam>> CQSVPipeline::GetOutputVideoInfo() {
-    auto prmset = std::make_unique<QSVVideoParam>(m_mfxEncParams.mfx.CodecId, m_mfxVer);
+    auto prmset = std::make_unique<QSVVideoParam>(m_mfxVer);
     if (m_pmfxENC) {
+        prmset->setExtParams(m_mfxEncParams.mfx.CodecId, m_encFeatures);
         auto sts = err_to_rgy(m_pmfxENC->GetVideoParam(&prmset->videoPrm));
         if (sts == RGY_ERR_NOT_INITIALIZED) { // 未初期化の場合、設定しようとしたパラメータで代用する
             prmset->videoPrm = m_mfxEncParams;
@@ -4110,6 +4130,26 @@ std::pair<RGY_ERR, std::unique_ptr<QSVVideoParam>> CQSVPipeline::GetOutputVideoI
         prmset->videoPrm = m_mfxDEC->mfxparams();
         return { RGY_ERR_NONE, std::move(prmset) };
     }
+    if (m_pFileReader) {
+        auto frameInfo = m_pFileReader->GetInputFrameInfo();
+        prmset->videoPrm.mfx.CodecId = 0;
+        // frameInfo から prmset->videoPrm.mfx.FrameInfo に値をコピーする
+        prmset->videoPrm.mfx.FrameInfo.FourCC = csp_rgy_to_enc(frameInfo.csp);
+        prmset->videoPrm.mfx.FrameInfo.ChromaFormat = chromafmt_rgy_to_enc(RGY_CSP_CHROMA_FORMAT[frameInfo.csp]);
+        prmset->videoPrm.mfx.FrameInfo.PicStruct = picstruct_rgy_to_enc(frameInfo.picstruct);
+        prmset->videoPrm.mfx.FrameInfo.BitDepthLuma = RGY_CSP_BIT_DEPTH[frameInfo.csp];
+        prmset->videoPrm.mfx.FrameInfo.BitDepthChroma = RGY_CSP_BIT_DEPTH[frameInfo.csp];
+        prmset->videoPrm.mfx.FrameInfo.Shift = 0;
+        prmset->videoPrm.mfx.FrameInfo.Width = (mfxU16)frameInfo.srcWidth;
+        prmset->videoPrm.mfx.FrameInfo.Height = (mfxU16)frameInfo.srcHeight;
+        prmset->videoPrm.mfx.FrameInfo.CropW = (mfxU16)frameInfo.srcWidth;
+        prmset->videoPrm.mfx.FrameInfo.CropH = (mfxU16)frameInfo.srcHeight;
+        prmset->videoPrm.mfx.FrameInfo.FrameRateExtN = frameInfo.fpsN;
+        prmset->videoPrm.mfx.FrameInfo.FrameRateExtD = frameInfo.fpsD;
+        prmset->videoPrm.mfx.FrameInfo.AspectRatioW = (mfxU16)frameInfo.sar[0];
+        prmset->videoPrm.mfx.FrameInfo.AspectRatioH = (mfxU16)frameInfo.sar[1];
+        return { RGY_ERR_NONE, std::move(prmset) };
+    }
     PrintMes(RGY_LOG_ERROR, _T("GetOutputVideoInfo: None of the pipeline elements are detected!\n"));
     return { RGY_ERR_UNSUPPORTED, std::move(prmset) };
 }
@@ -4135,15 +4175,16 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
 
     if (m_pmfxENC) {
         mfxParamSet prmSetOut;
-        prmSetOut.vidprm           = outFrameInfo->videoPrm;
-        prmSetOut.cop              = outFrameInfo->cop;
-        prmSetOut.cop2             = outFrameInfo->cop2;
-        prmSetOut.cop3             = outFrameInfo->cop3;
-        prmSetOut.hevc             = outFrameInfo->hevcPrm;
-        prmSetOut.av1BitstreamPrm  = outFrameInfo->av1BitstreamPrm;
-        prmSetOut.av1ResolutionPrm = outFrameInfo->av1ResolutionPrm;
-        prmSetOut.av1TilePrm       = outFrameInfo->av1TilePrm;
-        prmSetOut.hyperModePrm     = outFrameInfo->hyperModePrm;
+        prmSetOut.vidprm            = outFrameInfo->videoPrm;
+        prmSetOut.cop               = outFrameInfo->cop;
+        prmSetOut.cop2              = outFrameInfo->cop2;
+        prmSetOut.cop3              = outFrameInfo->cop3;
+        prmSetOut.hevc              = outFrameInfo->hevcPrm;
+        prmSetOut.av1BitstreamPrm   = outFrameInfo->av1BitstreamPrm;
+        prmSetOut.av1ResolutionPrm  = outFrameInfo->av1ResolutionPrm;
+        prmSetOut.av1TilePrm        = outFrameInfo->av1TilePrm;
+        prmSetOut.hyperModePrm      = outFrameInfo->hyperModePrm;
+        prmSetOut.tuneEncQualityPrm = outFrameInfo->tuneEncQualityPrm;
 
         CompareParam(m_prmSetIn, prmSetOut);
     }
@@ -4238,12 +4279,13 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
     }
     PRINT_INFO(_T("AVSync         %s\n"), get_chr_from_value(list_avsync, m_nAVSyncMode));
     if (m_pmfxENC) {
-        PRINT_INFO(_T("Output         %s%s %s @ Level %s%s\n"), CodecIdToStr(outFrameInfo->videoPrm.mfx.CodecId),
+        const auto enc_codec = codec_enc_to_rgy(outFrameInfo->videoPrm.mfx.CodecId);
+        PRINT_INFO(_T("Output         %s%s %s @ Level %s%s\n"), CodecToStr(enc_codec).c_str(),
             (outFrameInfo->videoPrm.mfx.FrameInfo.BitDepthLuma > 8) ? strsprintf(_T("(%s %dbit)"), ChromaFormatToStr(outFrameInfo->videoPrm.mfx.FrameInfo.ChromaFormat), outFrameInfo->videoPrm.mfx.FrameInfo.BitDepthLuma).c_str()
                                                                     : strsprintf(_T("(%s)"), ChromaFormatToStr(outFrameInfo->videoPrm.mfx.FrameInfo.ChromaFormat)).c_str(),
-            get_profile_list(outFrameInfo->videoPrm.mfx.CodecId)[get_cx_index(get_profile_list(outFrameInfo->videoPrm.mfx.CodecId), outFrameInfo->videoPrm.mfx.CodecProfile)].desc,
-            get_level_list(outFrameInfo->videoPrm.mfx.CodecId)[get_cx_index(get_level_list(outFrameInfo->videoPrm.mfx.CodecId), outFrameInfo->videoPrm.mfx.CodecLevel & 0xff)].desc,
-            (outFrameInfo->videoPrm.mfx.CodecId == MFX_CODEC_HEVC && (outFrameInfo->videoPrm.mfx.CodecLevel & MFX_TIER_HEVC_HIGH)) ? _T(" (high tier)") : _T(""));
+            get_profile_list(enc_codec)[get_cx_index(get_profile_list(enc_codec), outFrameInfo->videoPrm.mfx.CodecProfile)].desc,
+            get_level_list(enc_codec)[get_cx_index(get_level_list(enc_codec), outFrameInfo->videoPrm.mfx.CodecLevel & 0xff)].desc,
+            (enc_codec == RGY_CODEC_HEVC && (outFrameInfo->videoPrm.mfx.CodecLevel & MFX_TIER_HEVC_HIGH)) ? _T(" (high tier)") : _T(""));
     }
     PRINT_INFO(_T("%s         %dx%d%s %d:%d %0.3ffps (%d/%dfps)%s%s\n"),
         (m_pmfxENC) ? _T("      ") : _T("Output"),
@@ -4272,6 +4314,7 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
     }
 
     if (m_pmfxENC) {
+        const auto enc_codec = codec_enc_to_rgy(outFrameInfo->videoPrm.mfx.CodecId);
         PRINT_INFO(_T("Target usage   %s\n"), TargetUsageToStr(outFrameInfo->videoPrm.mfx.TargetUsage));
         PRINT_INFO(_T("Encode Mode    %s\n"), EncmodeToStr(outFrameInfo->videoPrm.mfx.RateControlMethod));
         if (m_mfxEncParams.mfx.RateControlMethod == MFX_RATECONTROL_CQP) {
@@ -4354,7 +4397,7 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
                 qp_limit_str(outFrameInfo->cop2.MaxQPI, outFrameInfo->cop2.MaxQPP, outFrameInfo->cop2.MaxQPB).c_str());
         }
 
-        if (outFrameInfo->videoPrm.mfx.CodecId == MFX_CODEC_AVC && !Check_HWUsed(impl)) {
+        if (enc_codec == RGY_CODEC_H264 && !Check_HWUsed(impl)) {
             if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_7)) {
                 PRINT_INFO(_T("Trellis        %s\n"), list_avc_trellis[get_cx_index(list_avc_trellis_for_options, outFrameInfo->cop2.Trellis)].desc);
             }
@@ -4370,7 +4413,7 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
         PRINT_INFO(_T("%s"), _T("Ref frames     "));
         PRINT_INT_AUTO(_T("%d frames\n"), outFrameInfo->videoPrm.mfx.NumRefFrame);
 
-        const bool showAsBframes = gopRefDistAsBframe(outFrameInfo->videoPrm.mfx.CodecId);
+        const bool showAsBframes = gopRefDistAsBframe(enc_codec);
         PRINT_INFO(_T("%s     "), (showAsBframes) ? _T("Bframes   ") : _T("GopRefDist"));
         const bool showBpyramid = check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_8) && outFrameInfo->videoPrm.mfx.GopRefDist >= 2;
         if (showAsBframes) {
@@ -4408,7 +4451,7 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
             PRINT_INFO(_T("Slices         %d\n"), outFrameInfo->videoPrm.mfx.NumSlice);
         }
 
-        if (outFrameInfo->videoPrm.mfx.CodecId == MFX_CODEC_VP8) {
+        if (enc_codec == RGY_CODEC_VP8) {
             PRINT_INFO(_T("Sharpness      %d\n"), outFrameInfo->copVp8.SharpnessLevel);
         }
         { const auto &vui_str = m_encVUI.print_all();
@@ -4419,7 +4462,7 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
         if (m_hdrsei) {
             const auto masterdisplay = m_hdrsei->print_masterdisplay();
             const auto maxcll = m_hdrsei->print_maxcll();
-            const auto atcsei = (outFrameInfo->videoPrm.mfx.CodecId == MFX_CODEC_HEVC) ? m_hdrsei->print_atcsei() : "";
+            const auto atcsei = (enc_codec == RGY_CODEC_HEVC) ? m_hdrsei->print_atcsei() : "";
             if (masterdisplay.length() > 0) {
                 const tstring tstr = char_to_tstring(masterdisplay);
                 const auto splitpos = tstr.find(_T("WP("));
@@ -4486,7 +4529,7 @@ RGY_ERR CQSVPipeline::CheckCurrentVideoParam(TCHAR *str, mfxU32 bufSize) {
                 extFeatures += _T("FadeDetect ");
             }
         }
-        if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_18) && outFrameInfo->videoPrm.mfx.CodecId == MFX_CODEC_HEVC) {
+        if (check_lib_version(m_mfxVer, MFX_LIB_VERSION_1_18) && enc_codec == RGY_CODEC_HEVC) {
             if (outFrameInfo->cop3.GPB == MFX_CODINGOPTION_ON) {
                 extFeatures += _T("GPB ");
             } else if (outFrameInfo->cop3.GPB == MFX_CODINGOPTION_OFF) {

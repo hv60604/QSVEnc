@@ -925,8 +925,8 @@ System::Boolean frmConfig::fcgCheckCodec() {
     }
 
     for (int codecIdx = 1; list_out_enc_codec[codecIdx].desc; codecIdx++) {
-        const mfxU32 codecId = list_out_enc_codec[codecIdx].value;
-        const bool codecAvail = featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codecId);
+        const auto codec = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
+        const bool codecAvail = featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codec);
         if (!codecAvail) {
             fcgCXEncCodec->Items[codecIdx] = L"-----------------";
             if (fcgCXEncCodec->SelectedIndex == codecIdx) {
@@ -944,13 +944,13 @@ System::Void frmConfig::fcgCheckFixedFunc() {
     if (featuresHW == nullptr || fcgCXDevice->SelectedIndex < 0) {
         return;
     }
-    const mfxU32 codecId = list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value;
-    if (!featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codecId)) {
+    const auto codec = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
+    if (!featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codec)) {
         return;
     }
 
-    const bool codecFFAvail = featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codecId, true);
-    const bool codecPGAvail = featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codecId, false);
+    const bool codecFFAvail = featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codec, true);
+    const bool codecPGAvail = featuresHW->getCodecAvail(fcgCXDevice->SelectedIndex, codec, false);
     fcgCBFixedFunc->Enabled = false;
     if (codecFFAvail && codecPGAvail) {
         fcgCBFixedFunc->Enabled = true;
@@ -985,23 +985,26 @@ System::Boolean frmConfig::fcgCheckRCModeLibVersion(int rc_mode_target, int rc_m
     return selected_idx_changed;
 }
 
-System::Boolean frmConfig::fcgCheckLibRateControl(mfxU64 available_features) {
+System::Boolean frmConfig::fcgCheckLibRateControl() {
+    const auto codec = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
+
     System::Boolean result = false;
-    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_AVBR,   MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_AVBR))) result = true;
-    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_QVBR,   MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_QVBR))) result = true;
-    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA,     MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_LA))) result = true;
-        //if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_EXT, MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_LA_EXT))) result = true;
-    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_HRD, MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_LA_HRD))) result = true;
-    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_ICQ,    MFX_RATECONTROL_CQP, 0 != (available_features & ENC_FEATURE_ICQ))) result = true;
-    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_ICQ, MFX_RATECONTROL_CQP, (ENC_FEATURE_LA | ENC_FEATURE_ICQ) == (available_features & (ENC_FEATURE_LA | ENC_FEATURE_ICQ)))) result = true;
-    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_VCM,    MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_VCM))) result = true;
+    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_AVBR,   MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_AVBR),   codec, fcgCBFixedFunc->Checked))) result = true;
+    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_QVBR,   MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_QVBR),   codec, fcgCBFixedFunc->Checked))) result = true;
+    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA,     MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA),     codec, fcgCBFixedFunc->Checked))) result = true;
+        //if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_EXT, MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA_EXT), codec, fcgCBFixedFunc->Checked))) result = true;
+    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_HRD, MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA_HRD), codec, fcgCBFixedFunc->Checked))) result = true;
+    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_ICQ,    MFX_RATECONTROL_CQP, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_ICQ),    codec, fcgCBFixedFunc->Checked))) result = true;
+    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_ICQ, MFX_RATECONTROL_CQP, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA_ICQ), codec, fcgCBFixedFunc->Checked))) result = true;
+    if (fcgCheckRCModeLibVersion(MFX_RATECONTROL_VCM,    MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_VCM),    codec, fcgCBFixedFunc->Checked))) result = true;
     return result;
 }
 
-System::Void frmConfig::fcgCheckBFrameAndGopRefDsit(mfxU64 available_features) {
-    const mfxU32 codecId = list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value;
+System::Void frmConfig::fcgCheckBFrameAndGopRefDsit() {
+    const RGY_CODEC codec = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
+    const auto available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codec, fcgCBFixedFunc->Checked);
     const int currentNUBframes = (int)fcgNUBframes->Value;
-    if (gopRefDistAsBframe(codecId)) {
+    if (gopRefDistAsBframe(codec)) {
         if (fcgLBBframes->Text == L"GopRefDist") {
             LOAD_CLI_TEXT(fcgLBBframes);
             LOAD_CLI_TEXT(fcgLBBframesAuto);
@@ -1032,12 +1035,15 @@ System::Void frmConfig::fcgCheckBFrameAndGopRefDsit(mfxU64 available_features) {
     }
 }
 
-System::Void frmConfig::fcgCheckLibVersion(mfxU64 available_features) {
+System::Void frmConfig::fcgCheckLibVersion() {
 
-    fcgCheckBFrameAndGopRefDsit(available_features);
+    fcgCheckBFrameAndGopRefDsit();
+
+    const auto codec = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
 
     //API v1.3 features
-    fcgCheckRCModeLibVersion(MFX_RATECONTROL_AVBR, MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_AVBR));
+    fcgCheckRCModeLibVersion(MFX_RATECONTROL_AVBR, MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_AVBR), codec, fcgCBFixedFunc->Checked));
+    auto available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codec, fcgCBFixedFunc->Checked); // fcgCXEncMode->SelectedIndex が変わっている可能性があるので再取得
     fcgLBVideoFormat->Enabled = 0 != (available_features & ENC_FEATURE_VUI_INFO);
     fcgCXVideoFormat->Enabled = 0 != (available_features & ENC_FEATURE_VUI_INFO);
     fcgLBFullrange->Enabled   = 0 != (available_features & ENC_FEATURE_VUI_INFO);
@@ -1058,15 +1064,17 @@ System::Void frmConfig::fcgCheckLibVersion(mfxU64 available_features) {
     if (!fcgCBMBBRC->Enabled)  fcgCBMBBRC->Checked = false;
 
     //API v1.7 features
-    fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA, MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_LA));
+    fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA, MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA), codec, fcgCBFixedFunc->Checked));
+    available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codec, fcgCBFixedFunc->Checked); // fcgCXEncMode->SelectedIndex が変わっている可能性があるので再取得
     fcgLBTrellis->Enabled = 0 != (available_features & ENC_FEATURE_TRELLIS);
     fcgCXTrellis->Enabled = 0 != (available_features & ENC_FEATURE_TRELLIS);
     if (!fcgCXTrellis->Enabled) fcgCXTrellis->SelectedIndex = 0;
 
     //API v1.8 features
-    fcgCheckRCModeLibVersion(MFX_RATECONTROL_ICQ,    MFX_RATECONTROL_CQP, 0 != (available_features & ENC_FEATURE_ICQ));
-    fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_ICQ, MFX_RATECONTROL_CQP, (ENC_FEATURE_LA | ENC_FEATURE_ICQ) == (available_features & (ENC_FEATURE_LA | ENC_FEATURE_ICQ)));
-    fcgCheckRCModeLibVersion(MFX_RATECONTROL_VCM,    MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_VCM));
+    fcgCheckRCModeLibVersion(MFX_RATECONTROL_ICQ,    MFX_RATECONTROL_CQP, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_ICQ),    codec, fcgCBFixedFunc->Checked));
+    fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_ICQ, MFX_RATECONTROL_CQP, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA_ICQ), codec, fcgCBFixedFunc->Checked));
+    fcgCheckRCModeLibVersion(MFX_RATECONTROL_VCM,    MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_VCM),    codec, fcgCBFixedFunc->Checked));
+    available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codec, fcgCBFixedFunc->Checked); // fcgCXEncMode->SelectedIndex が変わっている可能性があるので再取得
     fcgCBAdaptiveB->Enabled   = 0 != (available_features & ENC_FEATURE_ADAPTIVE_B);
     fcgCBAdaptiveI->Enabled   = 0 != (available_features & ENC_FEATURE_ADAPTIVE_I);
     fcgCBBPyramid->Enabled    = 0 != (available_features & ENC_FEATURE_B_PYRAMID);
@@ -1089,9 +1097,10 @@ System::Void frmConfig::fcgCheckLibVersion(mfxU64 available_features) {
     if (!fcgCBDeblock->Enabled)      fcgCBDeblock->Checked = true;
 
     //API v1.11 features
-    fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_HRD, MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_LA_HRD));
-    //fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_EXT, MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_LA_EXT));
-    fcgCheckRCModeLibVersion(MFX_RATECONTROL_QVBR,   MFX_RATECONTROL_VBR, 0 != (available_features & ENC_FEATURE_QVBR));
+    fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_HRD, MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA_HRD), codec, fcgCBFixedFunc->Checked));
+    //fcgCheckRCModeLibVersion(MFX_RATECONTROL_LA_EXT, MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_LA_EXT), codec, fcgCBFixedFunc->Checked));
+    fcgCheckRCModeLibVersion(MFX_RATECONTROL_QVBR,   MFX_RATECONTROL_VBR, featuresHW->getRCAvail(fcgCXDevice->SelectedIndex, get_cx_index(list_encmode, MFX_RATECONTROL_QVBR),   codec, fcgCBFixedFunc->Checked));
+    available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codec, fcgCBFixedFunc->Checked); // fcgCXEncMode->SelectedIndex が変わっている可能性があるので再取得
     fcgLBWinBRCSize->Enabled     = 0 != (available_features & ENC_FEATURE_WINBRC);
     fcgLBWinBRCSizeAuto->Enabled = 0 != (available_features & ENC_FEATURE_WINBRC);
     fcgNUWinBRCSize->Enabled     = 0 != (available_features & ENC_FEATURE_WINBRC);
@@ -1124,8 +1133,8 @@ System::Void frmConfig::fcgChangeEnabled(System::Object^  sender, System::EventA
     }
 
     this->SuspendLayout();
-    const mfxU32 codecId = list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value;
-    const mfxU64 available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codecId, fcgCBFixedFunc->Checked);
+    const auto codec = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
+    const mfxU64 available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codec, fcgCBFixedFunc->Checked);
 
     //つぎに全体のチェックを行う
     int enc_mode = list_encmode[fcgCXEncMode->SelectedIndex].value;
@@ -1238,22 +1247,18 @@ System::Void frmConfig::fcgDevOutputTypeFFPGChanged(System::Object^  sender, Sys
     this->SuspendLayout();
 
     if (fcgCheckCodec() || sender == fcgCXEncCodec) {
-        setComboBox(fcgCXCodecLevel, get_level_list(list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value));
-        setComboBox(fcgCXCodecProfile, get_profile_list(list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value));
+        setComboBox(fcgCXCodecLevel, get_level_list(get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex)));
+        setComboBox(fcgCXCodecProfile, get_profile_list(get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex)));
         fcgCXCodecLevel->SelectedIndex = 0;
         fcgCXCodecProfile->SelectedIndex = 0;
     }
     fcgCheckFixedFunc();
 
-    const mfxU32 codecId = list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value;
-    mfxU64 available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codecId, fcgCBFixedFunc->Checked);
     //まず、レート制御モードのみのチェックを行う
-    //もし、レート制御モードの更新が必要ならavailable_featuresの更新も行う
-    if (fcgCheckLibRateControl(available_features))
-        available_features = featuresHW->getFeatureOfRC(fcgCXDevice->SelectedIndex, fcgCXEncMode->SelectedIndex, codecId, fcgCBFixedFunc->Checked);
+    fcgCheckLibRateControl();
 
     //つぎに全体のチェックを行う
-    fcgCheckLibVersion(available_features);
+    fcgCheckLibVersion();
 
     UpdateFeatures(false);
     fcgChangeEnabled(sender, e);
@@ -1696,7 +1701,7 @@ System::Void frmConfig::ConfToFrm(CONF_GUIEX *cnf) {
     sInputParams prm_qsv;
     parse_cmd(&prm_qsv, cnf->enc.cmd);
 
-    SetCXIndex(fcgCXEncCodec,     get_cx_index(list_out_enc_codec, prm_qsv.CodecId));
+    SetCXIndex(fcgCXEncCodec,     get_cx_index(list_out_enc_codec, prm_qsv.codec));
     SetCXIndex(fcgCXEncMode,      get_cx_index(list_encmode, prm_qsv.nEncMode));
     SetCXIndex(fcgCXQualityPreset,get_cx_index(list_quality, prm_qsv.nTargetUsage));
     SetCXIndex(fcgCXDevice,       (featuresHW) ? featuresHW->getDevIndex(prm_qsv.device) : 0);
@@ -1710,14 +1715,14 @@ System::Void frmConfig::ConfToFrm(CONF_GUIEX *cnf) {
     SetNUValue(fcgNUQVBR,         prm_qsv.nQVBRQuality);
     SetNUValue(fcgNUGopLength,    Convert::ToDecimal(prm_qsv.nGOPLength));
     SetNUValue(fcgNURef,          prm_qsv.nRef);
-    if (gopRefDistAsBframe(prm_qsv.CodecId)) {
+    if (gopRefDistAsBframe(prm_qsv.codec)) {
         SetNUValue(fcgNUBframes, prm_qsv.GopRefDist-1);
     } else {
         SetNUValue(fcgNUBframes, prm_qsv.GopRefDist);
     }
     SetCXIndex(fcgCXTrellis,      get_cx_index(list_avc_trellis, prm_qsv.nTrellis));
-    SetCXIndex(fcgCXCodecLevel,   get_cx_index(get_level_list(prm_qsv.CodecId),   prm_qsv.CodecLevel));
-    SetCXIndex(fcgCXCodecProfile, get_cx_index(get_profile_list(prm_qsv.CodecId), prm_qsv.CodecProfile));
+    SetCXIndex(fcgCXCodecLevel,   get_cx_index(get_level_list(prm_qsv.codec),   prm_qsv.CodecLevel));
+    SetCXIndex(fcgCXCodecProfile, get_cx_index(get_profile_list(prm_qsv.codec), prm_qsv.CodecProfile));
     if (fcgCBFixedFunc->Enabled)
         fcgCBFixedFunc->Checked = prm_qsv.bUseFixedFunc != 0;
     if (fcgCBD3DMemAlloc->Enabled)
@@ -1725,14 +1730,14 @@ System::Void frmConfig::ConfToFrm(CONF_GUIEX *cnf) {
     SetNUValue(fcgNUAVBRAccuarcy, prm_qsv.nAVBRAccuarcy / Convert::ToDecimal(10.0));
     SetNUValue(fcgNUAVBRConvergence, prm_qsv.nAVBRConvergence);
     SetNUValue(fcgNULookaheadDepth, prm_qsv.nLookaheadDepth);
-    fcgCBAdaptiveI->Checked     = prm_qsv.bAdaptiveI != 0;
-    fcgCBAdaptiveB->Checked     = prm_qsv.bAdaptiveB != 0;
+    fcgCBAdaptiveI->Checked     = prm_qsv.bAdaptiveI.value_or(false);
+    fcgCBAdaptiveB->Checked     = prm_qsv.bAdaptiveB.value_or(false);
     fcgCBWeightP->Checked       = prm_qsv.nWeightP != MFX_WEIGHTED_PRED_UNKNOWN;
     fcgCBWeightB->Checked       = prm_qsv.nWeightB != MFX_WEIGHTED_PRED_UNKNOWN;
-    fcgCBFadeDetect->Checked    = prm_qsv.nFadeDetect == MFX_CODINGOPTION_ON;
-    fcgCBBPyramid->Checked      = prm_qsv.bBPyramid != 0;
+    fcgCBFadeDetect->Checked    = prm_qsv.nFadeDetect.value_or(false);
+    fcgCBBPyramid->Checked      = prm_qsv.bBPyramid.value_or(false);
     SetCXIndex(fcgCXLookaheadDS,  get_cx_index(list_lookahead_ds, prm_qsv.nLookaheadDS));
-    fcgCBMBBRC->Checked         = prm_qsv.bMBBRC != 0;
+    fcgCBMBBRC->Checked         = prm_qsv.bMBBRC.value_or(false);
     //fcgCBExtBRC->Checked        = prm_qsv.bExtBRC != 0;
     SetNUValue(fcgNUWinBRCSize,       prm_qsv.nWinBRCSize);
     SetCXIndex(fcgCXInterlaced,   get_cx_index(list_interlaced, prm_qsv.input.picstruct));
@@ -1760,7 +1765,7 @@ System::Void frmConfig::ConfToFrm(CONF_GUIEX *cnf) {
     SetCXIndex(fcgCXInterPred,   get_cx_index(list_pred_block_size, prm_qsv.nInterPred));
     SetCXIndex(fcgCXIntraPred,   get_cx_index(list_pred_block_size, prm_qsv.nIntraPred));
 
-    fcgCBDirectBiasAdjust->Checked = 0 != prm_qsv.bDirectBiasAdjust;
+    fcgCBDirectBiasAdjust->Checked = prm_qsv.bDirectBiasAdjust.value_or(false);
     SetCXIndex(fcgCXMVCostScaling, (prm_qsv.bGlobalMotionAdjust) ? get_cx_index(list_mv_cost_scaling, prm_qsv.nMVCostScaling) : 0);
 
     fcgCBDeblock->Checked        = prm_qsv.bNoDeblock == 0;
@@ -1950,14 +1955,14 @@ System::String^ frmConfig::FrmToConf(CONF_GUIEX *cnf) {
     //これもひたすら書くだけ。めんどい
     sInputParams prm_qsv;
 
-    prm_qsv.CodecId                = list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value;
-    cnf->enc.codec                 = prm_qsv.CodecId;
+    prm_qsv.codec                  = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
+    cnf->enc.codec_rgy             = prm_qsv.codec;
     prm_qsv.device                 = (featuresHW) ? (featuresHW->devCount() > 1 ? featuresHW->getDevID(fcgCXDevice->SelectedIndex) : QSVDeviceNum::AUTO) : QSVDeviceNum::AUTO;
     prm_qsv.nEncMode               = (int)list_encmode[fcgCXEncMode->SelectedIndex].value;
     prm_qsv.hyperMode              = (mfxHyperMode)list_hyper_mode[fcgCXHyperMode->SelectedIndex].value;
     prm_qsv.nTargetUsage           = (int)list_quality[fcgCXQualityPreset->SelectedIndex].value;
-    prm_qsv.CodecProfile           = (int)get_profile_list(prm_qsv.CodecId)[fcgCXCodecProfile->SelectedIndex].value;
-    prm_qsv.CodecLevel             = (int)get_level_list(prm_qsv.CodecId)[fcgCXCodecLevel->SelectedIndex].value;
+    prm_qsv.CodecProfile           = (int)get_profile_list(prm_qsv.codec)[fcgCXCodecProfile->SelectedIndex].value;
+    prm_qsv.CodecLevel             = (int)get_level_list(prm_qsv.codec)[fcgCXCodecLevel->SelectedIndex].value;
     prm_qsv.outputCsp              = (RGY_CHROMAFMT)list_output_csp[fcgCXOutputCsp->SelectedIndex].value;
     prm_qsv.outputDepth            = get_bit_depth(fcgCXBitDepth->SelectedIndex);
     prm_qsv.nBitRate               = (int)fcgNUBitrate->Value;
@@ -1971,7 +1976,7 @@ System::String^ frmConfig::FrmToConf(CONF_GUIEX *cnf) {
     prm_qsv.nQPB                   = (int)fcgNUQPB->Value;
     prm_qsv.nICQQuality            = (int)fcgNUICQQuality->Value;
     prm_qsv.nQVBRQuality           = (int)fcgNUQVBR->Value;
-    if (gopRefDistAsBframe(prm_qsv.CodecId)) {
+    if (gopRefDistAsBframe(prm_qsv.codec)) {
         prm_qsv.GopRefDist = (int)fcgNUBframes->Value + 1;
     } else {
         prm_qsv.GopRefDist = (int)fcgNUBframes->Value;
@@ -2641,7 +2646,7 @@ System::Void frmConfig::UpdateFeatures(bool reGenerateTable) {
     }
 
     //表示更新
-    const mfxU32 codecId = list_out_enc_codec[fcgCXEncCodec->SelectedIndex].value;
+    const auto codec = get_out_enc_codec_by_index(fcgCXEncCodec->SelectedIndex);
     const mfxU32 currentLib = featuresHW->GetmfxLibVer();
     String^ gpuname = featuresHW->GetGPUName();
     const bool currentLibValid = 0 != check_lib_version(currentLib, MFX_LIB_VERSION_1_1.Version);
@@ -2657,7 +2662,7 @@ System::Void frmConfig::UpdateFeatures(bool reGenerateTable) {
     fcgDGVFeatures->AllowUserToResizeRows = false;
     fcgDGVFeatures->AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode::Fill;
 
-    fcgDGVFeatures->DataSource = featuresHW->getFeatureTable(fcgCXDevice->SelectedIndex, codecId, fcgCBFixedFunc->Checked, reGenerateTable);
+    fcgDGVFeatures->DataSource = featuresHW->getFeatureTable(fcgCXDevice->SelectedIndex, codec, fcgCBFixedFunc->Checked, reGenerateTable);
 
     if (fcgDGVFeatures->Columns->Count > 0) {
         fcgDGVFeatures->Columns[0]->FillWeight = 240;

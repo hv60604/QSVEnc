@@ -31,9 +31,9 @@
 
 #include "rgy_rev.h"
 
-#define VER_FILEVERSION             0,7,48,0
-#define VER_STR_FILEVERSION          "7.48"
-#define VER_STR_FILEVERSION_TCHAR _T("7.48")
+#define VER_FILEVERSION             0,7,50,0
+#define VER_STR_FILEVERSION          "7.50"
+#define VER_STR_FILEVERSION_TCHAR _T("7.50")
 
 #ifdef _M_IX86
 #define BUILD_ARCH_STR _T("x86")
@@ -60,7 +60,7 @@ const char *get_encoder_version();
 #define AV1_TIMESTAMP_OVERRIDE 1
 #define OVERRIDE_HYPER_MODE_HEVC_FROM_H264 1
 #define LIMIT_HYPER_MODE_TO_KNOWN_CODECS 1
-#define ENABLE_QSV_TUNE_QUERY 0
+#define ENABLE_QSV_TUNE_QUERY 1
 
 #if defined(_WIN32) || defined(_WIN64)
 
@@ -87,6 +87,8 @@ const char *get_encoder_version();
 #define ENABLE_AVCODEC_AUDPROCESS_THREAD 1
 #define ENABLE_CPP_REGEX 1
 #define ENABLE_DTL 1
+
+#define AV_CHANNEL_LAYOUT_STRUCT_AVAIL 1
 
 #define ENABLE_AVCODEC_ITERATE 1
 #define ENABLE_DOVI_METADATA_OPTIONS 1

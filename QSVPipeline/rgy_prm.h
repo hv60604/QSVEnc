@@ -41,6 +41,7 @@ static const int OUTPUT_BUF_SIZE       = 16 * 1024 * 1024;
 
 static const int RGY_DEFAULT_PERF_MONITOR_INTERVAL = 500;
 static const int DEFAULT_IGNORE_DECODE_ERROR = 10;
+static const int DEFAULT_VIDEO_IGNORE_TIMESTAMP_ERROR = 10;
 
 #if ENCODER_NVENC
 #define ENABLE_VPP_FILTER_COLORSPACE   (ENABLE_NVRTC)
@@ -1319,8 +1320,8 @@ struct AudioSelect {
     tstring  extractFilename;      //抽出する音声のファイル名のリスト
     tstring  extractFormat;        //抽出する音声ファイルのフォーマット
     tstring  filter;               //音声フィルタ
-    uint64_t streamChannelSelect[MAX_SPLIT_CHANNELS]; //入力音声の使用するチャンネル
-    uint64_t streamChannelOut[MAX_SPLIT_CHANNELS];    //出力音声のチャンネル
+    std::array<std::string, MAX_SPLIT_CHANNELS> streamChannelSelect; //入力音声の使用するチャンネル
+    std::array<std::string, MAX_SPLIT_CHANNELS> streamChannelOut;    //出力音声のチャンネル
     tstring  bsf;                  // 適用するbitstreamfilterの名前
     tstring  disposition;          // 指定のdisposition
     std::string lang;              // 言語選択
@@ -1474,6 +1475,7 @@ struct RGYParamCommon {
     bool chapterNoTrim;
     C2AFormat caption2ass;
     int audioIgnoreDecodeError;
+    int videoIgnoreTimestampError;
     RGYOptList muxOpt;
     bool allowOtherNegativePts;
     bool disableMp4Opt;
@@ -1548,30 +1550,16 @@ const FEATURE_DESC list_simd[] = {
 };
 
 template <uint32_t size>
-static bool bSplitChannelsEnabled(uint64_t(&streamChannels)[size]) {
+static bool bSplitChannelsEnabled(const std::array<std::string, size>& streamChannels) {
     bool bEnabled = false;
-    for (uint32_t i = 0; i < size; i++) {
-        bEnabled |= streamChannels[i] != 0;
+    for (const auto& st : streamChannels) {
+        bEnabled |= !st.empty();
     }
     return bEnabled;
 }
 
-template <uint32_t size>
-static void setSplitChannelAuto(uint64_t(&streamChannels)[size]) {
-    for (uint32_t i = 0; i < size; i++) {
-        streamChannels[i] = ((uint64_t)1) << i;
-    }
-}
-
-template <uint32_t size>
-static bool isSplitChannelAuto(uint64_t(&streamChannels)[size]) {
-    bool isAuto = true;
-    for (uint32_t i = 0; isAuto && i < size; i++) {
-        isAuto &= (streamChannels[i] == (((uint64_t)1) << i));
-    }
-    return isAuto;
-}
-
 unique_ptr<RGYHDR10Plus> initDynamicHDR10Plus(const tstring &dynamicHdr10plusJson, shared_ptr<RGYLog> log);
+
+bool invalid_with_raw_out(const RGYParamCommon &prm, shared_ptr<RGYLog> log);
 
 #endif //__RGY_PRM_H__

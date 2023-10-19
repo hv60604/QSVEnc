@@ -3344,6 +3344,11 @@ int parse_log_level_param(const TCHAR *option_name, const TCHAR *arg_value, RGYP
     for (const auto& param : RGY_LOG_TYPE_STR) {
         paramList.push_back(tchar_to_string(param.second));
     }
+    std::vector<CX_DESC> logLevelList;
+    for (const auto& param : RGY_LOG_LEVEL_STR) {
+        logLevelList.push_back({ param.second, param.first });
+    }
+    logLevelList.push_back({ nullptr, 0 });
 
     for (const auto &param : split(arg_value, _T(","))) {
         auto pos = param.find_first_of(_T("="));
@@ -3352,7 +3357,7 @@ int parse_log_level_param(const TCHAR *option_name, const TCHAR *arg_value, RGYP
             auto param_val = param.substr(pos + 1);
             param_arg = tolowercase(param_arg);
             int value = 0;
-            if (get_list_value(list_log_level, param_val.c_str(), &value)) {
+            if (get_list_value(logLevelList.data(), param_val.c_str(), &value)) {
                 auto type_ret = std::find_if(RGY_LOG_TYPE_STR.begin(), RGY_LOG_TYPE_STR.end(), [param_arg](decltype(RGY_LOG_TYPE_STR[0])& type) {
                     return param_arg == type.second;
                     });
@@ -3364,16 +3369,16 @@ int parse_log_level_param(const TCHAR *option_name, const TCHAR *arg_value, RGYP
                     return 1;
                 }
             } else {
-                print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val, list_log_level);
+                print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val, logLevelList.data());
                 return 1;
             }
         } else {
             int value = 0;
-            if (get_list_value(list_log_level, param.c_str(), &value)) {
+            if (get_list_value(logLevelList.data(), param.c_str(), &value)) {
                 loglevel.set((RGYLogLevel)value, RGY_LOGT_ALL);
                 continue;
             } else {
-                print_cmd_error_invalid_value(option_name, arg_value, list_log_level);
+                print_cmd_error_invalid_value(option_name, arg_value, logLevelList.data());
                 return 1;
             }
         }
@@ -4124,6 +4129,16 @@ int parse_one_common_option(const TCHAR *option_name, const TCHAR *strInput[], i
     if (IS_OPTION("audio-ignore-notrack-error")) {
         return 0;
     }
+    if (IS_OPTION("video-ignore-timestamp-error")) {
+        i++;
+        uint32_t value = 0;
+        if (1 != _stscanf_s(strInput[i], _T("%d"), &value)) {
+            print_cmd_error_invalid_value(option_name, strInput[i]);
+            return 1;
+        }
+        common->videoIgnoreTimestampError = value;
+        return 0;
+    }
     if (IS_OPTION("audio-samplerate")) {
         try {
             auto ret = set_audio_prm([](AudioSelect *pAudioSelect, int trackId, const TCHAR *prmstr) {
@@ -4151,17 +4166,12 @@ int parse_one_common_option(const TCHAR *option_name, const TCHAR *strInput[], i
         return 0;
     }
     if (IS_OPTION("audio-stream")) {
-        //ここで、av_get_channel_layout()を使うため、チェックする必要がある
-        if (!check_avcodec_dll()) {
-            _ftprintf(stderr, _T("%s\n--audio-stream could not be used.\n"), error_mes_avcodec_dll_not_found().c_str());
-            return 1;
-        }
 
         try {
             auto ret = set_audio_prm([](AudioSelect *pAudioSelect, int trackId, const TCHAR *prmstr) {
-                if (trackId != 0 || (pAudioSelect->streamChannelSelect[0] == 0 && pAudioSelect->streamChannelOut[0] == 0)) {
+                if (trackId != 0 || (pAudioSelect->streamChannelSelect[0].empty() && pAudioSelect->streamChannelOut[0].empty())) {
                     auto streamSelectList = split(tchar_to_string(prmstr), ",");
-                    if (streamSelectList.size() > _countof(pAudioSelect->streamChannelSelect)) {
+                    if (streamSelectList.size() > pAudioSelect->streamChannelSelect.size()) {
                         return 1;
                     }
                     static const char *DELIM = ":";
@@ -4169,15 +4179,14 @@ int parse_one_common_option(const TCHAR *option_name, const TCHAR *strInput[], i
                         auto selectPtr = streamSelectList[j].c_str();
                         auto selectDelimPos = strstr(selectPtr, DELIM);
                         if (selectDelimPos == nullptr) {
-                            auto channelLayout = av_get_channel_layout(selectPtr);
-                            pAudioSelect->streamChannelSelect[j] = channelLayout;
+                            pAudioSelect->streamChannelSelect[j] = selectPtr;
                             pAudioSelect->streamChannelOut[j]    = RGY_CHANNEL_AUTO; //自動
                         } else if (selectPtr == selectDelimPos) {
                             pAudioSelect->streamChannelSelect[j] = RGY_CHANNEL_AUTO;
-                            pAudioSelect->streamChannelOut[j]    = av_get_channel_layout(selectDelimPos + strlen(DELIM));
+                            pAudioSelect->streamChannelOut[j]    = selectDelimPos + strlen(DELIM);
                         } else {
-                            pAudioSelect->streamChannelSelect[j] = av_get_channel_layout(streamSelectList[j].substr(0, selectDelimPos - selectPtr).c_str());
-                            pAudioSelect->streamChannelOut[j]    = av_get_channel_layout(selectDelimPos + strlen(DELIM));
+                            pAudioSelect->streamChannelSelect[j] = streamSelectList[j].substr(0, selectDelimPos - selectPtr);
+                            pAudioSelect->streamChannelOut[j]    = selectDelimPos + strlen(DELIM);
                         }
                     }
                 }
@@ -5196,7 +5205,15 @@ int parse_one_ctrl_option(const TCHAR *option_name, const TCHAR *strInput[], int
         }
         i++;
 
-        auto parse_val = [option_name](RGYThreadAffinity& affinity, const tstring& param_arg, const tstring& param_val) {
+        std::array<CX_DESC, RGY_THREAD_AFFINITY_MODE_STR.size() + 1> list_thread_affinity_mode;
+        for (size_t ia = 0; ia < RGY_THREAD_AFFINITY_MODE_STR.size(); ia++) {
+            list_thread_affinity_mode[ia].value = (int)RGY_THREAD_AFFINITY_MODE_STR[ia].second;
+            list_thread_affinity_mode[ia].desc = RGY_THREAD_AFFINITY_MODE_STR[ia].first;
+        }
+        list_thread_affinity_mode[RGY_THREAD_AFFINITY_MODE_STR.size()].value = 0;
+        list_thread_affinity_mode[RGY_THREAD_AFFINITY_MODE_STR.size()].desc = nullptr;
+
+        auto parse_val = [option_name, &list_thread_affinity_mode](RGYThreadAffinity& affinity, const tstring& param_arg, const tstring& param_val) {
             if (param_val.substr(0, 2) == _T("0x")) {
                 try {
                     uint64_t affintyValue = std::strtoull(tchar_to_string(param_val).c_str(), nullptr, 16);
@@ -5232,13 +5249,6 @@ int parse_one_ctrl_option(const TCHAR *option_name, const TCHAR *strInput[], int
             if (affinity_mode != RGYThreadAffinityMode::END) {
                 affinity = RGYThreadAffinity(affinity_mode, affintyValue);
             } else {
-                std::array<CX_DESC, RGY_THREAD_AFFINITY_MODE_STR.size() + 1> list_thread_affinity_mode;
-                for (size_t i = 0; i < RGY_THREAD_AFFINITY_MODE_STR.size(); i++) {
-                    list_thread_affinity_mode[i].value = (int)RGY_THREAD_AFFINITY_MODE_STR[i].second;
-                    list_thread_affinity_mode[i].desc = RGY_THREAD_AFFINITY_MODE_STR[i].first;
-                }
-                list_thread_affinity_mode[RGY_THREAD_AFFINITY_MODE_STR.size()].value = 0;
-                list_thread_affinity_mode[RGY_THREAD_AFFINITY_MODE_STR.size()].desc = nullptr;
                 print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val, list_thread_affinity_mode.data());
                 return 1;
             }
@@ -5269,7 +5279,7 @@ int parse_one_ctrl_option(const TCHAR *option_name, const TCHAR *strInput[], int
                         return 1;
                     }
                 } else {
-                    print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val, list_log_level);
+                    print_cmd_error_invalid_value(tstring(option_name) + _T(" ") + param_arg + _T("="), param_val, list_thread_affinity_mode.data());
                     return 1;
                 }
             } else {
@@ -6243,20 +6253,16 @@ tstring gen_cmd(const RGYParamCommon *param, const RGYParamCommon *defaultPrm, b
         tmp.str(tstring());
         const AudioSelect *pAudioSelect = param->ppAudioSelectList[i];
         for (int j = 0; j < MAX_SPLIT_CHANNELS; j++) {
-            if (pAudioSelect->streamChannelSelect[j] == 0) {
+            if (pAudioSelect->streamChannelSelect[j].empty()) {
                 break;
             }
             if (j > 0) tmp << _T(",");
             if (pAudioSelect->streamChannelSelect[j] != RGY_CHANNEL_AUTO) {
-                char buf[256];
-                av_get_channel_layout_string(buf, _countof(buf), 0, pAudioSelect->streamChannelOut[j]);
-                tmp << char_to_tstring(buf);
+                tmp << char_to_tstring(pAudioSelect->streamChannelOut[j]);
             }
             if (pAudioSelect->streamChannelOut[j] != RGY_CHANNEL_AUTO) {
                 tmp << _T(":");
-                char buf[256];
-                av_get_channel_layout_string(buf, _countof(buf), 0, pAudioSelect->streamChannelOut[j]);
-                tmp << char_to_tstring(buf);
+                tmp << char_to_tstring(pAudioSelect->streamChannelOut[j]);
             }
         }
         if (!tmp.str().empty()) {
@@ -6377,6 +6383,7 @@ tstring gen_cmd(const RGYParamCommon *param, const RGYParamCommon *defaultPrm, b
         }
     }
     OPT_NUM(_T("--audio-ignore-decode-error"), audioIgnoreDecodeError);
+    OPT_NUM(_T("--video-ignore-timestamp-error"), videoIgnoreTimestampError);
 
     tmp.str(tstring());
     for (int i = 0; i < param->nSubtitleSelectCount; i++) {
@@ -7389,7 +7396,7 @@ tstring gen_cmd_help_ctrl() {
     tstring str = strsprintf(_T("\n")
         _T("   --log <string>               set log file name\n")
         _T("   --log-level <string>         set log level\n")
-        _T("                                  debug, info(default), warn, error\n")
+        _T("                                  debug, info(default), warn, error, quiet\n")
         _T("   --log-opt [<param1>][,<param2>][]...\n")
         _T("     additional options for log output.\n")
         _T("    params\n")
